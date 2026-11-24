@@ -218,6 +218,7 @@ every change and all of them before a release.
 - [ ] MT-33 hard power loss at several commit moments: `HEAD` old or complete,
       `verify` passes, GC cleans up
 - [ ] MT-34 attach/detach loop: no stuck lock, duplicate sync or leak
+- [ ] MT-35 lost drive recovery: rebuild from A, merge B's unsynced work
 
 ## Open questions
 

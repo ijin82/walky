@@ -164,6 +164,7 @@ type Daemon struct {
 	mounting    bool
 	mounts      func() ([]device.Mount, error)
 	mountFilter func(string) bool
+	scanStores  func() ([]device.Device, error)
 	gcRunning   bool
 	trayItem    *tray.Tray
 	shutdown    context.CancelFunc
@@ -208,6 +209,7 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 		checkFS:    store.CheckFilesystem,
 		mounter:    mounterFunc(device.MountLabeled),
 		mounts:     func() ([]device.Mount, error) { return device.ReadMounts("/proc/self/mountinfo") },
+		scanStores: func() ([]device.Device, error) { return device.NewWatcher(0).Scan() },
 		state:      StateNoDevice,
 		settings: Settings{
 			Excludes:  append([]string(nil), cfg.Excludes...),
@@ -449,6 +451,34 @@ func (d *Daemon) startTray(ctx context.Context) {
 	go t.Run(ctx)
 }
 
+// reattach looks for an already mounted store with the configured repo_id.
+// Changing the config (adopting a drive) does not change the mount table, so
+// the polling watcher would not emit a new attach event by itself.
+func (d *Daemon) reattach() {
+	if d.scanStores == nil {
+		return
+	}
+	stores, err := d.scanStores()
+	if err != nil {
+		d.log.Debug("reattach scan failed", "err", err)
+		return
+	}
+	d.mu.Lock()
+	repoID := d.cfg.RepoID
+	current := ""
+	if d.dev != nil {
+		current = d.dev.StoreRoot
+	}
+	d.mu.Unlock()
+	for _, dev := range stores {
+		if dev.Marker.RepoID != repoID || dev.StoreRoot == current {
+			continue
+		}
+		d.attach(dev)
+		return
+	}
+}
+
 func (d *Daemon) quit() {
 	d.log.Info("quit requested from the tray")
 	// "Quit Walky" should leave neither a stray daemon nor a window that
@@ -593,6 +623,10 @@ func (d *Daemon) attach(dev device.Device) {
 		return
 	}
 	d.mu.Lock()
+	if d.dev != nil && d.dev.StoreRoot == dev.StoreRoot {
+		d.mu.Unlock()
+		return
+	}
 	if d.cfg.RepoID != "" && dev.Marker.RepoID != d.cfg.RepoID {
 		d.mu.Unlock()
 		d.log.Warn("ignoring drive with unexpected repo_id",
@@ -986,6 +1020,7 @@ func (d *Daemon) InitStore(mountPoint, repoPath string) (string, error) {
 	if err := d.ReloadConfig(); err != nil {
 		return res.RepoID, err
 	}
+	d.reattach()
 	d.recordEvent(Event{Path: storeRoot, Op: "init", Result: "ok", Time: time.Now().Unix()})
 	d.log.Info("store initialized", "root", storeRoot, "repo", repoPath)
 	return res.RepoID, nil
@@ -1013,6 +1048,7 @@ func (d *Daemon) UseStore(mountPoint, repoPath string) (string, error) {
 		if err := d.ReloadConfig(); err != nil {
 			return drive.RepoID, err
 		}
+		d.reattach()
 		d.recordEvent(Event{Path: drive.StoreRoot, Op: "adopt", Result: "ok", Time: time.Now().Unix()})
 		return drive.RepoID, nil
 	}

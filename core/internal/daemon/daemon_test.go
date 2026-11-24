@@ -419,6 +419,7 @@ func TestDrivesAndInitStore(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
 	cfg := config.Default()
 	cfg.Repo.Path = repo
+	cfg.Device.AutoSync = false
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -473,5 +474,46 @@ func TestUseStoreRequiresInitializedDrive(t *testing.T) {
 	d.mountFilter = func(string) bool { return true }
 	if _, err := d.UseStore(mount, repo); err == nil {
 		t.Fatal("UseStore accepted a drive without a store")
+	}
+}
+
+func TestUseStoreReattachesImmediately(t *testing.T) {
+	mount := t.TempDir()
+	storeRoot := filepath.Join(mount, "WALKY")
+	st, err := store.Init(storeRoot, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := st.Marker()
+	repo := t.TempDir()
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Default()
+	cfg.Repo.Path = repo
+	cfg.Device.AutoSync = false
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	d := New(Config{RepoPath: repo, ConfigPath: cfgPath, NoTray: true},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d.mounts = func() ([]device.Mount, error) {
+		return []device.Mount{{Point: mount, FSType: "ext4"}}, nil
+	}
+	d.checkFS = func(string) error { return nil }
+	d.mountFilter = func(string) bool { return true }
+	d.scanStores = func() ([]device.Device, error) {
+		return []device.Device{{
+			MountPoint: mount, StoreRoot: storeRoot, Label: "test", Marker: marker,
+		}}, nil
+	}
+
+	id, err := d.UseStore(mount, repo)
+	if err != nil {
+		t.Fatalf("UseStore: %v", err)
+	}
+	if id != marker.RepoID {
+		t.Fatalf("repo id = %q, want %q", id, marker.RepoID)
+	}
+	if d.dev == nil || d.dev.StoreRoot != storeRoot {
+		t.Fatalf("store was not attached: %+v", d.dev)
 	}
 }
