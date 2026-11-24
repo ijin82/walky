@@ -6,8 +6,9 @@ After=graphical-session.target
 StartLimitIntervalSec=0
 
 [Service]
-# M3: the daemon starts owning io.github.ijin.Walky1, which makes this unit
-# D-Bus activatable. Until then `walky daemon` exits after SIGTERM only.
+# The daemon owns io.github.ijin.Walky1 on the session bus; systemd considers
+# the unit started once the name appears, and D-Bus activation starts it on
+# demand.
 Type=dbus
 BusName=io.github.ijin.Walky1
 ExecStart=/usr/bin/walky daemon

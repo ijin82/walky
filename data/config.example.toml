@@ -1,7 +1,7 @@
 # ~/.config/walky/config.toml
 [repo]
 path = "~/Sync"
-# repo_id из /WALKY/walky.json; пусто = доверять любому маркеру (не рекомендуется)
+# repo_id from /WALKY/walky.json; empty = trust any marker (not recommended)
 repo_id = ""
 
 [sync]
@@ -9,7 +9,7 @@ mode = "two-way"          # two-way | push-only
 conflict = "copy"         # copy | newest | local-wins
 debounce_ms = 3000
 full_scan_min = 10
-workers = 0               # 0 = авто (NumCPU, но не больше 8 на HDD)
+workers = 0               # 0 = auto (NumCPU, capped at 8 on HDD)
 max_file_size = "8G"
 sync_on_battery = true
 

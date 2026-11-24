@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Walky
+GenericName=Offline Drive Sync
+Comment=Synchronize a folder with a Walky USB drive
+Exec=walky-ui
+Icon=drive-removable-media
+Terminal=false
+Type=Application
+Categories=Utility;FileTools;
+Keywords=sync;usb;flash;backup;offline;
+StartupNotify=true
+X-GNOME-UsesNotifications=true

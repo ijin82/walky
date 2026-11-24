@@ -372,3 +372,13 @@ func uploadAll(t *testing.T, st *store.Store, src string, m *store.Manifest) {
 		}
 	}
 }
+
+func TestInitCreatesMissingDirectory(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "WALKY")
+	if _, err := store.Init(root, false); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, store.MarkerName)); err != nil {
+		t.Fatalf("marker: %v", err)
+	}
+}

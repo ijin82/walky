@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -11,8 +12,9 @@ import (
 	"time"
 
 	"walky/internal/config"
+	"walky/internal/engine"
 	"walky/internal/machineid"
-	"walky/internal/scan"
+	"walky/internal/state"
 	"walky/internal/store"
 )
 
@@ -47,6 +49,7 @@ func cmdSnapshot(args []string) error {
 	storePath := fs.String("store", "", "mount point of the Walky drive")
 	repoPath := fs.String("repo", "", "local folder to snapshot (default: repo.path)")
 	message := fs.String("message", "", "optional commit message")
+	forceRescan := fs.Bool("force-rescan", false, "ignore the hash index and rehash every file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -72,75 +75,44 @@ func cmdSnapshot(args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "scanning %s\n", repo)
-	res, err := scan.Walk(repo, scan.Options{
-		Excludes:    cfg.Exclude.Patterns,
-		MaxFileSize: maxSize,
-		Workers:     cfg.Sync.Workers,
-	})
-	if err != nil {
-		return err
-	}
-	entries, files, bytesTotal := res.Manifest.Stats()
-	fmt.Fprintf(os.Stderr, "scanned: %d entries, %d files, %s\n", entries, files, humanBytes(bytesTotal))
-	for _, s := range res.Skipped {
-		fmt.Fprintf(os.Stderr, "skip: %s (%s)\n", s.Path, s.Reason)
-	}
-
-	uploaded, uploadedBytes, err := putMissingObjects(st, repo, &res.Manifest)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "stored: %d new objects, %s\n", uploaded, humanBytes(uploadedBytes))
-
 	id, err := machineid.Get()
 	if err != nil {
 		return err
 	}
-	commit, err := st.Commit(&res.Manifest, store.CommitOptions{Machine: id, Message: *message})
+	idxPath, err := state.IndexPath(repo)
 	if err != nil {
 		return err
 	}
-	if !commit.Changed {
-		fmt.Printf("generation %d: no changes\n", commit.Gen)
+
+	fmt.Fprintf(os.Stderr, "scanning %s\n", repo)
+	res, err := engine.Run(context.Background(), engine.Options{
+		StoreRoot:   st.Root(),
+		RepoPath:    repo,
+		Excludes:    cfg.Exclude.Patterns,
+		MaxFileSize: maxSize,
+		Workers:     cfg.Sync.Workers,
+		IndexPath:   idxPath,
+		Machine:     id,
+		Message:     *message,
+		ForceRescan: *forceRescan,
+	}, nil)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "scanned: %d entries, %d files, %s (%d cached, %d hashed)\n",
+		res.Entries, res.Files, humanBytes(res.Bytes), res.Cached, res.Hashed)
+	for _, sk := range res.Skipped {
+		fmt.Fprintf(os.Stderr, "skip: %s (%s)\n", sk.Path, sk.Reason)
+	}
+	fmt.Fprintf(os.Stderr, "stored: %d new objects in %d packs, %s\n",
+		res.Objects, res.Packs, humanBytes(res.UploadBytes))
+
+	if !res.Changed {
+		fmt.Printf("generation %d: no changes\n", res.Gen)
 		return nil
 	}
-	fmt.Printf("generation %d: committed %d entries, %s\n", commit.Gen, entries, humanBytes(bytesTotal))
+	fmt.Printf("generation %d: committed %d entries, %s\n", res.Gen, res.Entries, humanBytes(res.Bytes))
 	return nil
-}
-
-func putMissingObjects(st *store.Store, repo string, m *store.Manifest) (int, int64, error) {
-	var count int
-	var total int64
-	for i := range m.Entries {
-		e := &m.Entries[i]
-		if e.Type != store.TypeFile {
-			continue
-		}
-		has, err := st.HasObject(e.Hash)
-		if err != nil {
-			return count, total, err
-		}
-		if has {
-			continue
-		}
-		path := filepath.Join(repo, filepath.FromSlash(e.Path))
-		f, err := os.Open(path)
-		if err != nil {
-			return count, total, fmt.Errorf("open %s: %w", e.Path, err)
-		}
-		hash, size, err := st.PutObject(f)
-		_ = f.Close()
-		if err != nil {
-			return count, total, fmt.Errorf("store %s: %w", e.Path, err)
-		}
-		if hash != e.Hash {
-			return count, total, fmt.Errorf("%s changed during scan (hash %s, expected %s)", e.Path, hash, e.Hash)
-		}
-		count++
-		total += size
-	}
-	return count, total, nil
 }
 
 func cmdLs(args []string) error {

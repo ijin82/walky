@@ -3,6 +3,7 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -54,51 +55,42 @@ func (s *Store) Verify(full bool) (*VerifyReport, error) {
 		report.Objects++
 		report.Bytes += e.Size
 
-		p, err := s.ObjectPath(e.Hash)
+		size, err := s.ObjectInfo(e.Hash)
 		if err != nil {
-			report.Corrupt = append(report.Corrupt, e.Path)
+			if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
+				report.Missing = append(report.Missing, e.Path)
+			} else {
+				report.Corrupt = append(report.Corrupt, e.Path)
+			}
 			continue
 		}
-		fi, err := os.Stat(p)
-		if err != nil {
-			report.Missing = append(report.Missing, e.Path)
-			continue
-		}
-		if fi.Size() != e.Size {
+		if size != e.Size {
 			report.SizeMismatch = append(report.SizeMismatch, e.Path)
 			continue
 		}
 		if !full {
 			continue
 		}
-		if err := verifyObject(p, e.Hash); err != nil {
+		if err := s.CheckObject(e.Hash); err != nil {
 			report.Corrupt = append(report.Corrupt, e.Path)
 		}
 	}
 	return report, nil
 }
 
-func verifyObject(path, want string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	h := blake3.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return err
-	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != want {
-		return fmt.Errorf("hash mismatch: got %s, want %s", got, want)
-	}
-	return nil
-}
-
 // CheckObject reports whether a single object matches its digest.
 func (s *Store) CheckObject(hash string) error {
-	p, err := s.ObjectPath(hash)
+	rc, err := s.OpenObject(hash)
 	if err != nil {
 		return err
 	}
-	return verifyObject(p, hash)
+	defer rc.Close()
+	h := blake3.New()
+	if _, err := io.Copy(h, rc); err != nil {
+		return err
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != hash {
+		return fmt.Errorf("hash mismatch: got %s, want %s", got, hash)
+	}
+	return nil
 }

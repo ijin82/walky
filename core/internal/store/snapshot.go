@@ -36,6 +36,10 @@ type Meta struct {
 type CommitOptions struct {
 	Machine string
 	Message string
+	// ExpectParent, when non-nil, aborts the commit unless HEAD still points at
+	// that generation. It prevents overwriting a generation written by another
+	// machine while this sync was running.
+	ExpectParent *int64
 }
 
 // CommitResult reports the committed generation.
@@ -109,6 +113,10 @@ func (s *Store) commitLocked(m *Manifest, opts CommitOptions) (CommitResult, err
 		parent = 0
 	default:
 		return CommitResult{}, err
+	}
+	if opts.ExpectParent != nil && *opts.ExpectParent != parent {
+		return CommitResult{}, fmt.Errorf("%w: expected %d, found %d",
+			ErrHeadChanged, *opts.ExpectParent, parent)
 	}
 
 	// Every referenced object must be on the drive before HEAD can point at it.
@@ -228,4 +236,25 @@ func (s *Store) Latest() (*Manifest, *Meta, error) {
 		return nil, nil, err
 	}
 	return s.ReadSnapshot(head.Gen)
+}
+
+// CommittedHashes returns the object hashes referenced by the current HEAD.
+// Only these objects are known to be durable: files left behind by an
+// interrupted commit may exist but be truncated, so upload deduplication must
+// rely on this set rather than on mere presence.
+func (s *Store) CommittedHashes() (map[string]struct{}, error) {
+	m, _, err := s.Latest()
+	if errors.Is(err, ErrNoHead) {
+		return map[string]struct{}{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(m.Entries))
+	for _, e := range m.Entries {
+		if e.Type == TypeFile {
+			set[e.Hash] = struct{}{}
+		}
+	}
+	return set, nil
 }

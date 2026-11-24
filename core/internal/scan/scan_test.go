@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"walky/internal/index"
 	"walky/internal/store"
 )
 
@@ -138,4 +139,82 @@ func sorted(entries []store.Entry) bool {
 		}
 	}
 	return true
+}
+
+func TestWalkIndexCache(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "a.txt"), "a")
+	mustWrite(t, filepath.Join(root, "b.txt"), "b")
+	db, err := index.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	first, err := Walk(root, Options{Index: db})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Cached != 0 || first.Hashed != 2 {
+		t.Fatalf("first scan: cached=%d hashed=%d", first.Cached, first.Hashed)
+	}
+
+	second, err := Walk(root, Options{Index: db})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Cached != 2 || second.Hashed != 0 {
+		t.Fatalf("second scan: cached=%d hashed=%d", second.Cached, second.Hashed)
+	}
+	a, _ := store.EncodeManifest(&first.Manifest)
+	b, _ := store.EncodeManifest(&second.Manifest)
+	if string(a) != string(b) {
+		t.Fatal("cached scan produced a different manifest")
+	}
+
+	// A content change must invalidate only that file.
+	mustWrite(t, filepath.Join(root, "a.txt"), "changed content")
+	third, err := Walk(root, Options{Index: db})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Cached != 1 || third.Hashed != 1 {
+		t.Fatalf("third scan: cached=%d hashed=%d", third.Cached, third.Hashed)
+	}
+
+	// A deleted file must be pruned from the index.
+	if err := os.Remove(filepath.Join(root, "b.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Walk(root, Options{Index: db}); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := db.LoadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := recs["b.txt"]; ok {
+		t.Fatal("deleted file is still cached")
+	}
+}
+
+func TestWalkForceRescan(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "a.txt"), "a")
+	db, err := index.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := Walk(root, Options{Index: db}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Walk(root, Options{Index: db, ForceRescan: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Cached != 0 || res.Hashed != 1 {
+		t.Fatalf("force rescan: cached=%d hashed=%d", res.Cached, res.Hashed)
+	}
 }

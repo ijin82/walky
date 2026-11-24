@@ -2,6 +2,7 @@
 package scan
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,10 +12,12 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"syscall"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/zeebo/blake3"
 
+	"walky/internal/index"
 	"walky/internal/store"
 )
 
@@ -27,6 +30,12 @@ type Options struct {
 	MaxFileSize int64
 	// Workers is the number of hashing goroutines (0 means auto).
 	Workers int
+	// Index caches hashes between scans. Optional.
+	Index *index.DB
+	// ForceRescan ignores cached hashes and rehashes every file.
+	ForceRescan bool
+	// Context cancels the walk and the hashing workers. Optional.
+	Context context.Context
 }
 
 // Skipped records a path that was not included in the manifest.
@@ -39,17 +48,29 @@ type Skipped struct {
 type Result struct {
 	Manifest store.Manifest
 	Skipped  []Skipped
+	// Cached is the number of files whose hash came from the index.
+	Cached int
+	// Hashed is the number of files that had to be read.
+	Hashed int
 }
 
 type candidate struct {
-	path string
-	rel  string
-	info fs.FileInfo
+	path    string
+	rel     string
+	info    fs.FileInfo
+	dev     uint64
+	ino     uint64
+	mtimeNS int64
+	ctimeNS int64
 }
 
-// Walk scans root and hashes every regular file. The result is sorted by path
-// and ready to be committed.
+// Walk scans root and hashes new or changed regular files. The result is
+// sorted by path and ready to be committed.
 func Walk(root string, opt Options) (*Result, error) {
+	ctx := opt.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -62,15 +83,31 @@ func Walk(root string, opt Options) (*Result, error) {
 		return nil, fmt.Errorf("scan root %s is not a directory", abs)
 	}
 
+	var cache map[string]index.Record
+	if opt.Index != nil && !opt.ForceRescan {
+		cache, err = opt.Index.LoadAll()
+		if err != nil {
+			return nil, fmt.Errorf("load index: %w", err)
+		}
+	}
+
 	var (
 		dirs       []store.Entry
 		links      []store.Entry
+		files      []store.Entry
 		candidates []candidate
 		skipped    []Skipped
+		updates    []index.Record
+		cached     int
 	)
+	// seen holds every regular file that still exists, for index pruning.
+	seen := make(map[string]struct{})
 
 	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if path == abs {
@@ -110,7 +147,27 @@ func Walk(root string, opt Options) (*Result, error) {
 				skipped = append(skipped, Skipped{Path: rel, Reason: "larger than max_file_size"})
 				return nil
 			}
-			candidates = append(candidates, candidate{path: path, rel: rel, info: info})
+			dev, ino, mtimeNS, ctimeNS := statFields(info)
+			seen[rel] = struct{}{}
+
+			if rec, ok := cache[rel]; ok &&
+				rec.Dev == dev && rec.Ino == ino && rec.Size == info.Size() &&
+				rec.MtimeNS == mtimeNS && rec.CtimeNS == ctimeNS && looksLikeHash(rec.Hash) {
+				files = append(files, store.Entry{
+					Path: rel, Type: store.TypeFile, Size: info.Size(),
+					Mode: mode, MtimeNS: mtime, Hash: rec.Hash,
+				})
+				cached++
+				if rec.Mode != mode {
+					rec.Mode = mode
+					updates = append(updates, rec)
+				}
+				return nil
+			}
+			candidates = append(candidates, candidate{
+				path: path, rel: rel, info: info,
+				dev: dev, ino: ino, mtimeNS: mtimeNS, ctimeNS: ctimeNS,
+			})
 		default:
 			skipped = append(skipped, Skipped{Path: rel, Reason: "unsupported file type"})
 		}
@@ -120,28 +177,68 @@ func Walk(root string, opt Options) (*Result, error) {
 		return nil, walkErr
 	}
 
-	hashes, err := hashAll(candidates, opt.Workers)
+	hashes, err := hashAll(ctx, candidates, opt.Workers)
 	if err != nil {
 		return nil, err
 	}
-
-	entries := make([]store.Entry, 0, len(dirs)+len(links)+len(candidates))
-	entries = append(entries, dirs...)
-	entries = append(entries, links...)
 	for i, c := range candidates {
-		entries = append(entries, store.Entry{
-			Path:    c.rel,
-			Type:    store.TypeFile,
-			Size:    c.info.Size(),
-			Mode:    store.ModeToUnix(c.info.Mode()),
-			MtimeNS: c.info.ModTime().UnixNano(),
-			Hash:    hashes[i],
+		hash := hashes[i]
+		updates = append(updates, index.Record{
+			Path: c.rel, Dev: c.dev, Ino: c.ino, Size: c.info.Size(),
+			MtimeNS: c.mtimeNS, CtimeNS: c.ctimeNS,
+			Mode: store.ModeToUnix(c.info.Mode()), Hash: hash,
+		})
+		files = append(files, store.Entry{
+			Path: c.rel, Type: store.TypeFile, Size: c.info.Size(),
+			Mode: store.ModeToUnix(c.info.Mode()), MtimeNS: c.info.ModTime().UnixNano(),
+			Hash: hash,
 		})
 	}
+
+	entries := make([]store.Entry, 0, len(dirs)+len(links)+len(files))
+	entries = append(entries, dirs...)
+	entries = append(entries, links...)
+	entries = append(entries, files...)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	sort.Slice(skipped, func(i, j int) bool { return skipped[i].Path < skipped[j].Path })
 
-	return &Result{Manifest: store.Manifest{Entries: entries}, Skipped: skipped}, nil
+	if opt.Index != nil {
+		if err := opt.Index.Apply(updates, seen); err != nil {
+			return nil, fmt.Errorf("update index: %w", err)
+		}
+	}
+
+	return &Result{
+		Manifest: store.Manifest{Entries: entries},
+		Skipped:  skipped,
+		Cached:   cached,
+		Hashed:   len(candidates),
+	}, nil
+}
+
+func statFields(info fs.FileInfo) (dev, ino uint64, mtimeNS, ctimeNS int64) {
+	mtimeNS = info.ModTime().UnixNano()
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		dev = uint64(st.Dev)
+		ino = st.Ino
+		ctimeNS = st.Ctim.Sec*1e9 + st.Ctim.Nsec
+	}
+	return dev, ino, mtimeNS, ctimeNS
+}
+
+func looksLikeHash(h string) bool {
+	if len(h) != 64 {
+		return false
+	}
+	for _, c := range h {
+		switch {
+		case c >= '0' && c <= '9':
+		case c >= 'a' && c <= 'f':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func excluded(rel string, patterns []string) bool {
@@ -153,7 +250,7 @@ func excluded(rel string, patterns []string) bool {
 	return false
 }
 
-func hashAll(candidates []candidate, workers int) ([]string, error) {
+func hashAll(ctx context.Context, candidates []candidate, workers int) ([]string, error) {
 	results := make([]string, len(candidates))
 	if len(candidates) == 0 {
 		return results, nil
@@ -181,6 +278,10 @@ func hashAll(candidates []candidate, workers int) ([]string, error) {
 			for {
 				i := int(next.Add(1))
 				if i >= len(candidates) || firstErr.Load() != nil {
+					return
+				}
+				if err := ctx.Err(); err != nil {
+					firstErr.CompareAndSwap(nil, err)
 					return
 				}
 				hash, err := hashFile(candidates[i].path)

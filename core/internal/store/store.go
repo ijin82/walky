@@ -6,7 +6,8 @@
 //	walky.json                  marker: format, repo_id, created
 //	HEAD                        {"format":1,"gen":N,"manifest_sha256":"..."}
 //	objects/ab/cd/<blake3>      file contents
-//	packs/                      reserved for packed small objects (M2)
+//	packs/pack-<id>.pack        packed small objects (one zstd frame each)
+//	packs/pack-<id>.idx         binary index: hash, offset, compressed/raw size
 //	snapshots/NNNNNNNN.jsonl.zst  full manifest of one generation
 //	snapshots/NNNNNNNN.meta.json  generation metadata
 //	machines/<id>.json          per-machine base (M4)
@@ -27,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -57,6 +59,8 @@ var (
 	ErrNotEmpty = errors.New("directory is not empty")
 	// ErrNoHead means the store has no committed snapshots yet.
 	ErrNoHead = errors.New("store has no snapshots")
+	// ErrHeadChanged means another writer advanced HEAD during this sync.
+	ErrHeadChanged = errors.New("store HEAD changed during sync")
 	// ErrLocked means another process holds the store lock.
 	ErrLocked = errors.New("store is locked by another process")
 )
@@ -73,6 +77,9 @@ type Marker struct {
 type Store struct {
 	root   string
 	marker Marker
+
+	catMu sync.Mutex
+	cat   *packCatalog
 }
 
 // Init creates a new store in root. When force is false, a non-empty
@@ -84,7 +91,16 @@ func Init(root string, force bool) (*Store, error) {
 		return nil, err
 	}
 	fi, err := os.Stat(abs)
-	if err != nil {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return nil, fmt.Errorf("create store root: %w", err)
+		}
+		fi, err = os.Stat(abs)
+		if err != nil {
+			return nil, fmt.Errorf("store root: %w", err)
+		}
+	case err != nil:
 		return nil, fmt.Errorf("store root: %w", err)
 	}
 	if !fi.IsDir() {
@@ -132,6 +148,37 @@ func Init(root string, force bool) (*Store, error) {
 	return Open(abs)
 }
 
+// ReadMarker reads and validates the marker without touching the directory.
+// It is safe to call on foreign mounted filesystems.
+func ReadMarker(root string) (Marker, error) {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return Marker{}, err
+	}
+	data, err := os.ReadFile(filepath.Join(abs, MarkerName))
+	if errors.Is(err, os.ErrNotExist) {
+		return Marker{}, fmt.Errorf("%w: %s", ErrNotInitialized, abs)
+	}
+	if err != nil {
+		return Marker{}, err
+	}
+	var m Marker
+	if err := json.Unmarshal(data, &m); err != nil {
+		return Marker{}, fmt.Errorf("parse %s: %w", MarkerName, err)
+	}
+	if m.Format != FormatVersion {
+		return Marker{}, fmt.Errorf("unsupported store format %d (this build supports %d)",
+			m.Format, FormatVersion)
+	}
+	if len(m.RepoID) != 32 {
+		return Marker{}, fmt.Errorf("invalid repo_id %q in %s", m.RepoID, MarkerName)
+	}
+	if _, err := hex.DecodeString(m.RepoID); err != nil {
+		return Marker{}, fmt.Errorf("invalid repo_id %q: %w", m.RepoID, err)
+	}
+	return m, nil
+}
+
 // Open reads the marker and validates the on-drive format. Missing layout
 // directories are recreated, which makes a store usable after a partial copy.
 func Open(root string) (*Store, error) {
@@ -139,26 +186,9 @@ func Open(root string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(abs, MarkerName))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("%w: %s", ErrNotInitialized, abs)
-	}
+	m, err := ReadMarker(abs)
 	if err != nil {
 		return nil, err
-	}
-	var m Marker
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", MarkerName, err)
-	}
-	if m.Format != FormatVersion {
-		return nil, fmt.Errorf("unsupported store format %d (this build supports %d)",
-			m.Format, FormatVersion)
-	}
-	if len(m.RepoID) != 32 {
-		return nil, fmt.Errorf("invalid repo_id %q in %s", m.RepoID, MarkerName)
-	}
-	if _, err := hex.DecodeString(m.RepoID); err != nil {
-		return nil, fmt.Errorf("invalid repo_id %q: %w", m.RepoID, err)
 	}
 	for _, d := range []string{objectsDir, packsDir, snapshotsDir, machinesDir, trashDir, logDir} {
 		if err := os.MkdirAll(filepath.Join(abs, d), 0o755); err != nil {
