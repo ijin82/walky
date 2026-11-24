@@ -97,10 +97,13 @@ func TestMenuSeparator(t *testing.T) {
 }
 
 func TestIconNamePaused(t *testing.T) {
-	if got := iconName(Snapshot{State: "idle"}); got != "walky-symbolic" {
+	if got := iconName(Snapshot{State: "idle", Device: "WALKY"}); got != "walky-symbolic" {
 		t.Fatalf("idle icon = %q", got)
 	}
-	if got := iconName(Snapshot{State: "idle", Paused: true}); got != "walky-paused-symbolic" {
+	if got := iconName(Snapshot{State: "no_device"}); got != "walky-offline-symbolic" {
+		t.Fatalf("no_device icon = %q", got)
+	}
+	if got := iconName(Snapshot{State: "idle", Device: "WALKY", Paused: true}); got != "walky-paused-symbolic" {
 		t.Fatalf("paused flag icon = %q", got)
 	}
 	if got := iconName(Snapshot{State: "paused"}); got != "walky-paused-symbolic" {

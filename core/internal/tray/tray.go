@@ -193,6 +193,9 @@ func iconName(snap Snapshot) string {
 	if snap.Paused || snap.State == "paused" {
 		return "walky-paused-symbolic"
 	}
+	if snap.State == "no_device" || snap.Device == "" {
+		return "walky-offline-symbolic"
+	}
 	return "walky-symbolic"
 }
 

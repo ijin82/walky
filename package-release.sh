@@ -102,7 +102,8 @@ for f in \
     "data/walky.service" \
     "data/walky.svg" \
     "data/walky-symbolic.svg" \
-    "data/walky-paused-symbolic.svg"
+    "data/walky-paused-symbolic.svg" \
+    "data/walky-offline-symbolic.svg"
 do
     cp -p "${f}" "${STAGE_DIR}/${f}"
 done

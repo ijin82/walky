@@ -30,6 +30,7 @@ install_prebuilt_local() {
     install -Dm644 data/walky.svg "${icon_dir}/scalable/apps/${APP_ID}.svg"
     install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/walky-symbolic.svg"
     install -Dm644 data/walky-paused-symbolic.svg "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    install -Dm644 data/walky-offline-symbolic.svg "${icon_dir}/scalable/apps/walky-offline-symbolic.svg"
     install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg"
     install -Dm644 data/walky.service "${unit_dir}/walky.service"
     sed -i 's|/usr/bin/walky|%h/.local/bin/walky|' "${unit_dir}/walky.service"
@@ -42,7 +43,7 @@ uninstall_prebuilt_local() {
     rm -f "${prefix}/bin/walky" "${prefix}/bin/walky-ui"
     rm -f "${prefix}/share/applications/${APP_ID}.desktop" "${prefix}/share/applications/walky.desktop"
     rm -f "${icon_dir}/scalable/apps/walky.svg" "${icon_dir}/scalable/apps/${APP_ID}.svg"
-    rm -f "${icon_dir}/scalable/apps/walky-symbolic.svg" "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg" "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    rm -f "${icon_dir}/scalable/apps/walky-symbolic.svg" "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg" "${icon_dir}/scalable/apps/walky-paused-symbolic.svg" "${icon_dir}/scalable/apps/walky-offline-symbolic.svg"
     rm -f "${unit_dir}/walky.service"
 }
 
@@ -56,6 +57,7 @@ install_prebuilt_system() {
     install -Dm644 data/walky.svg "${icon_dir}/scalable/apps/${APP_ID}.svg"
     install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/walky-symbolic.svg"
     install -Dm644 data/walky-paused-symbolic.svg "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    install -Dm644 data/walky-offline-symbolic.svg "${icon_dir}/scalable/apps/walky-offline-symbolic.svg"
     install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg"
     install -Dm644 data/walky.service "${prefix}/lib/systemd/user/walky.service"
 }
@@ -66,7 +68,7 @@ uninstall_prebuilt_system() {
     rm -f "${prefix}/bin/walky" "${prefix}/bin/walky-ui"
     rm -f "${prefix}/share/applications/${APP_ID}.desktop" "${prefix}/share/applications/walky.desktop"
     rm -f "${icon_dir}/scalable/apps/walky.svg" "${icon_dir}/scalable/apps/${APP_ID}.svg"
-    rm -f "${icon_dir}/scalable/apps/walky-symbolic.svg" "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg" "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    rm -f "${icon_dir}/scalable/apps/walky-symbolic.svg" "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg" "${icon_dir}/scalable/apps/walky-paused-symbolic.svg" "${icon_dir}/scalable/apps/walky-offline-symbolic.svg"
     rm -f "${prefix}/lib/systemd/user/walky.service"
 }
 
