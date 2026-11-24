@@ -63,6 +63,7 @@ enable_service() {
     fi
     systemctl --user enable --now walky.service
     info "walky.service enabled and started"
+    service_status
 }
 
 disable_service() {
@@ -71,6 +72,7 @@ disable_service() {
     fi
     systemctl --user disable --now walky.service 2>/dev/null || true
     info "walky.service stopped and disabled"
+    service_status
 }
 
 offer_service() {
@@ -124,6 +126,8 @@ manage_service() {
     active="$(service_active)"
     if [ "${enabled}" = "enabled" ]; then
         if [ "${active}" = "active" ]; then
+            echo "  It is enabled and running."
+            echo "  Press Enter to stop and disable it, or n to leave it alone."
             printf "  Stop and disable it? [y/N]: "
             if read -r answer; then
                 case "${answer}" in
@@ -132,16 +136,28 @@ manage_service() {
                 esac
             fi
         else
+            echo "  It is enabled but not running."
+            echo "  Press Enter (or type y) to start it now, or run:"
+            echo "    systemctl --user start walky.service"
             printf "  Start it now? [Y/n]: "
             if read -r answer; then
                 case "${answer}" in
-                    n|N|no|NO) echo "  Left stopped." ;;
-                    *) systemctl --user start walky.service && info "walky.service started" ;;
+                    n|N|no|NO) echo "  Left stopped. Start later: systemctl --user start walky.service" ;;
+                    *)
+                        if systemctl --user start walky.service; then
+                            info "walky.service started"
+                            service_status
+                        else
+                            warn "failed to start; see: journalctl --user -u walky.service -n 30"
+                        fi
+                        ;;
                 esac
             fi
         fi
     elif [ "${active}" = "active" ]; then
-        printf "  It is running but will not start at login. Enable it? [Y/n]: "
+        echo "  It is running but will not start at login."
+        echo "  Press Enter to enable autostart, or n to leave it as is."
+        printf "  Enable it? [Y/n]: "
         if read -r answer; then
             case "${answer}" in
                 n|N|no|NO) echo "  Left running without autostart." ;;
@@ -149,11 +165,20 @@ manage_service() {
             esac
         fi
     else
+        echo "  It is disabled and stopped."
+        echo "  Press Enter (or type y) to enable and start it now, or run:"
+        echo "    systemctl --user enable --now walky.service"
         printf "  Enable and start it? [Y/n]: "
         if read -r answer; then
             case "${answer}" in
-                n|N|no|NO) echo "  Left disabled." ;;
-                *) enable_service ;;
+                n|N|no|NO) echo "  Left disabled. Later: systemctl --user enable --now walky.service" ;;
+                *)
+                    if enable_service; then
+                        :
+                    else
+                        warn "failed to enable; see: journalctl --user -u walky.service -n 30"
+                    fi
+                    ;;
             esac
         fi
     fi
@@ -173,6 +198,8 @@ Commands:
   service           Show service status, enable or disable it
   enable            Enable and start the user service
   disable           Stop and disable the user service
+  start             Start the user service
+  stop              Stop the user service
   help              Show this help
 
 Examples:
@@ -313,6 +340,14 @@ case "${1:-menu}" in
     service) manage_service ;;
     enable) enable_service ;;
     disable) disable_service ;;
+    start)
+        systemctl --user start walky.service && info "walky.service started"
+        service_status
+        ;;
+    stop)
+        systemctl --user stop walky.service && info "walky.service stopped"
+        service_status
+        ;;
     -h|--help|help) usage ;;
     *)
         echo "Unknown command: $1" >&2

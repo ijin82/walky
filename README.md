@@ -231,8 +231,9 @@ Running `./install.sh` without arguments opens a menu:
 5. service status (enable/disable the user service).
 
 `./install.sh local` prints the unit path, whether it is enabled and active, and
-offers to enable and start it. `./install.sh service`, `enable` and `disable`
-manage the user service non-interactively. Uninstalling stops and disables the
+offers to enable and start it. `./install.sh service` shows the status and offers
+the matching action (enable, start, stop or disable); `enable`, `disable`,
+`start` and `stop` do the same non-interactively. Uninstalling stops and disables the
 service before removing the unit.
 
 The script builds both binaries and installs `walky`, `walky-ui`, the desktop
