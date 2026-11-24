@@ -87,7 +87,7 @@ func (m *menu) layout(parentID int32, depth int32) (layoutItem, bool) {
 		{ID: idPause, Props: actionProps(pauseLabel)},
 		{ID: idOpen, Props: actionProps("Open Walky")},
 		{ID: idVerify, Props: actionProps("Verify integrity")},
-		{ID: idEject, Props: enabledProps("Eject drive", snap.Device != "")},
+		{ID: idEject, Props: enabledProps("Eject drive", snap.Device != "" && snap.State != "syncing")},
 		{ID: idSep, Props: map[string]dbus.Variant{"type": dbus.MakeVariant("separator")}},
 		{ID: idQuit, Props: actionProps("Quit Walky")},
 	}
