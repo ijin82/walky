@@ -446,3 +446,116 @@ func TestDifferentStoreNeedsRecovery(t *testing.T) {
 		t.Fatalf("normal sync after recovery: %v", err)
 	}
 }
+
+func TestRemoteDirDeletePreservesLocalAdditions(t *testing.T) {
+	env := newSyncEnv(t)
+	env.write(t, "A", "dir/old.txt", "old")
+	env.sync(t, "A")
+	env.sync(t, "B")
+
+	// A deletes the whole directory.
+	if err := os.RemoveAll(filepath.Join(env.repo("A"), "dir")); err != nil {
+		t.Fatal(err)
+	}
+	env.sync(t, "A")
+
+	// B adds a new file inside the same directory before syncing.
+	env.write(t, "B", "dir/new.txt", "new")
+	env.sync(t, "B")
+
+	// dir/old.txt must be gone (in trash), while dir/new.txt must survive and
+	// propagate to A.
+	if _, err := os.Stat(filepath.Join(env.repo("B"), "dir/old.txt")); !os.IsNotExist(err) {
+		t.Fatalf("deleted file survived on B: %v", err)
+	}
+	env.expect(t, "B", "dir/new.txt", "new")
+	env.sync(t, "A")
+	env.expect(t, "A", "dir/new.txt", "new")
+}
+
+func TestApplyFilePreservesExistingOnMissingObject(t *testing.T) {
+	env := newSyncEnv(t)
+	st, err := store.Open(env.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.write(t, "B", "note.txt", "original")
+	root, err := os.OpenRoot(env.repo("B"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+
+	err = applyFile(st, root, "note.txt", store.Entry{
+		Path: "note.txt", Type: store.TypeFile, Size: 5, Mode: 0o644,
+		Hash: "0000000000000000000000000000000000000000000000000000000000000000",
+	})
+	if err == nil {
+		t.Fatal("applyFile succeeded with missing object")
+	}
+	env.expect(t, "B", "note.txt", "original")
+}
+
+func TestApplyRemoteRejectsSymlinkEscape(t *testing.T) {
+	env := newSyncEnv(t)
+	st, err := store.Open(env.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(env.repo("B"), "escape")); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(env.repo("B"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+
+	err = applyRemote(st, root, store.Entry{
+		Path: "escape/pwned.txt", Type: store.TypeFile, Size: 0, Mode: 0o644,
+		Hash: fmt.Sprintf("%x", blake3.Sum256(nil)),
+	})
+	if err == nil {
+		t.Fatal("applyRemote escaped through symlink")
+	}
+	if _, statErr := os.Stat(filepath.Join(outside, "pwned.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("file was written outside repo: %v", statErr)
+	}
+}
+
+func TestCopyAndRemoveFallback(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "dst.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyAndRemove(src, dst); err != nil {
+		t.Fatalf("copyAndRemove file: %v", err)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Fatalf("src still exists: %v", err)
+	}
+	data, err := os.ReadFile(dst)
+	if err != nil || string(data) != "hello" {
+		t.Fatalf("dst = %q, %v", data, err)
+	}
+
+	linkSrc := filepath.Join(dir, "link-src")
+	linkDst := filepath.Join(dir, "link-dst")
+	if err := os.Symlink("dst.txt", linkSrc); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyAndRemove(linkSrc, linkDst); err != nil {
+		t.Fatalf("copyAndRemove symlink: %v", err)
+	}
+	if _, err := os.Lstat(linkSrc); !os.IsNotExist(err) {
+		t.Fatalf("linkSrc still exists: %v", err)
+	}
+	target, err := os.Readlink(linkDst)
+	if err != nil || target != "dst.txt" {
+		t.Fatalf("linkDst target = %q, %v", target, err)
+	}
+}

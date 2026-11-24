@@ -122,6 +122,12 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 	var pulled, deleted, conflicts int
 	trashedLocal := make(map[string]bool)
 
+	repoRoot, err := os.OpenRoot(opt.RepoPath)
+	if err != nil {
+		return Result{}, fmt.Errorf("open repo root %s: %w", opt.RepoPath, err)
+	}
+	defer repoRoot.Close()
+
 	// Pull first: downloads are applied even if the later push fails.
 	done := 0
 	for _, item := range plan {
@@ -130,13 +136,21 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 		}
 		switch item.Kind {
 		case actPull:
-			if err := applyRemote(st, opt.RepoPath, item.Remote); err != nil {
+			if err := applyRemote(st, repoRoot, item.Remote); err != nil {
 				return Result{}, err
 			}
 			pulled++
 			done++
 			report(progress, Progress{Phase: "pull", Done: done, Total: len(plan), Path: item.Path, Op: "pull"})
 		case actDeleteLocal:
+			if item.Local.Type == store.TypeDir {
+				// Never move a whole directory to trash: it may still hold
+				// locally added or excluded files. pruneEmptyDirs removes it
+				// later if nothing remains inside.
+				trashedLocal[item.Path] = true
+				done++
+				continue
+			}
 			if err := moveToTrash(opt.RepoPath, opt.TrashDir, item.Path, now); err != nil {
 				return Result{}, err
 			}
@@ -145,7 +159,7 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 			done++
 			report(progress, Progress{Phase: "pull", Done: done, Total: len(plan), Path: item.Path, Op: "delete"})
 		case actConflictRemote:
-			conflictRel, localEntry, err := resolveConflictCopy(st, opt.RepoPath, item, host, now)
+			conflictRel, localEntry, err := resolveConflictCopy(st, repoRoot, opt.RepoPath, item, host, now)
 			if err != nil {
 				return Result{}, err
 			}
@@ -190,7 +204,7 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 	}
 
 	// Directory metadata is applied after content so timestamps survive.
-	if err := applyDirMetadata(opt.RepoPath, remote); err != nil {
+	if err := applyDirMetadata(repoRoot, remote); err != nil {
 		return Result{}, err
 	}
 
@@ -394,7 +408,7 @@ func buildPlan(local, remote, base *store.Manifest, policy string) []planItem {
 			}
 		case !localChanged && remoteChanged:
 			if s.isNil() {
-				plan = append(plan, planItem{Path: p, Kind: actDeleteLocal})
+				plan = append(plan, planItem{Path: p, Kind: actDeleteLocal, Local: l.e})
 			} else {
 				plan = append(plan, planItem{Path: p, Kind: actPull, Remote: s.e})
 			}
@@ -483,45 +497,47 @@ func checkSpace(path string, needed int64) error {
 	return nil
 }
 
-func applyRemote(st *store.Store, repo string, e store.Entry) error {
-	dst := filepath.Join(repo, filepath.FromSlash(e.Path))
+func applyRemote(st *store.Store, root *os.Root, e store.Entry) error {
+	p := filepath.FromSlash(e.Path)
 	switch e.Type {
 	case store.TypeDir:
-		if fi, err := os.Lstat(dst); err == nil && !fi.IsDir() {
-			if err := os.Remove(dst); err != nil {
+		if fi, err := root.Lstat(p); err == nil && !fi.IsDir() {
+			if err := root.Remove(p); err != nil {
 				return fmt.Errorf("replace %q: %w", e.Path, err)
 			}
 		}
-		if err := os.MkdirAll(dst, store.UnixToMode(e.Mode)|0o700); err != nil {
+		if err := root.MkdirAll(p, store.UnixToMode(e.Mode)|0o700); err != nil {
 			return fmt.Errorf("create directory %q: %w", e.Path, err)
 		}
 		return nil
 	case store.TypeSymlink:
-		if err := prepareTarget(dst); err != nil {
+		if err := rejectDirTarget(root, p); err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return err
+		if dir := filepath.Dir(p); dir != "." {
+			if err := root.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
 		}
-		tmp := dst + ".walky-tmp-link"
-		_ = os.Remove(tmp)
-		if err := os.Symlink(e.Target, tmp); err != nil {
+		tmp := tempSibling(p, "link")
+		_ = root.Remove(tmp)
+		if err := root.Symlink(e.Target, tmp); err != nil {
 			return fmt.Errorf("create symlink %q: %w", e.Path, err)
 		}
-		if err := os.Rename(tmp, dst); err != nil {
-			_ = os.Remove(tmp)
+		if err := root.Rename(tmp, p); err != nil {
+			_ = root.Remove(tmp)
 			return fmt.Errorf("install symlink %q: %w", e.Path, err)
 		}
 		return nil
 	case store.TypeFile:
-		return applyFile(st, dst, e)
+		return applyFile(st, root, p, e)
 	default:
 		return nil
 	}
 }
 
-func prepareTarget(dst string) error {
-	fi, err := os.Lstat(dst)
+func rejectDirTarget(root *os.Root, p string) error {
+	fi, err := root.Lstat(p)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -529,28 +545,35 @@ func prepareTarget(dst string) error {
 		return err
 	}
 	if fi.IsDir() {
-		return fmt.Errorf("refusing to replace directory %s with a file", dst)
+		return fmt.Errorf("refusing to replace directory %q with a file", p)
 	}
-	return os.Remove(dst)
+	return nil
 }
 
-func applyFile(st *store.Store, dst string, e store.Entry) error {
-	if err := prepareTarget(dst); err != nil {
+func tempSibling(p, kind string) string {
+	dir, base := filepath.Split(p)
+	name := fmt.Sprintf(".walky-%s-%d-%d-%s", kind, os.Getpid(), time.Now().UnixNano(), base)
+	return filepath.Join(dir, name)
+}
+
+func applyFile(st *store.Store, root *os.Root, p string, e store.Entry) error {
+	if err := rejectDirTarget(root, p); err != nil {
 		return err
 	}
-	dir := filepath.Dir(dst)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+	if dir := filepath.Dir(p); dir != "." {
+		if err := root.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
 	}
-	tmp, err := os.CreateTemp(dir, ".walky-apply-")
+	tmpName := tempSibling(p, "apply")
+	tmp, err := root.OpenFile(tmpName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	tmpName := tmp.Name()
 	renamed := false
 	defer func() {
 		if !renamed {
-			_ = os.Remove(tmpName)
+			_ = root.Remove(tmpName)
 		}
 	}()
 
@@ -582,30 +605,31 @@ func applyFile(st *store.Store, dst string, e store.Entry) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, dst); err != nil {
+	if err := root.Rename(tmpName, p); err != nil {
 		return fmt.Errorf("install %q: %w", e.Path, err)
 	}
 	renamed = true
 	if e.MtimeNS > 0 {
 		t := time.Unix(0, e.MtimeNS)
-		if err := os.Chtimes(dst, t, t); err != nil {
+		if err := root.Chtimes(p, t, t); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func resolveConflictCopy(st *store.Store, repo string, item planItem, host string, now time.Time) (string, store.Entry, error) {
-	localPath := filepath.Join(repo, filepath.FromSlash(item.Path))
+func resolveConflictCopy(st *store.Store, root *os.Root, repo string, item planItem, host string, now time.Time) (string, store.Entry, error) {
 	rel := uniqueConflictRel(repo, item.Path, host, now)
-	dst := filepath.Join(repo, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return "", store.Entry{}, err
+	dstRel := filepath.FromSlash(rel)
+	if dir := filepath.Dir(dstRel); dir != "." {
+		if err := root.MkdirAll(dir, 0o755); err != nil {
+			return "", store.Entry{}, err
+		}
 	}
-	if err := os.Rename(localPath, dst); err != nil {
+	if err := root.Rename(filepath.FromSlash(item.Path), dstRel); err != nil {
 		return "", store.Entry{}, fmt.Errorf("rename conflict copy %q: %w", item.Path, err)
 	}
-	if err := applyRemote(st, repo, item.Remote); err != nil {
+	if err := applyRemote(st, root, item.Remote); err != nil {
 		return "", store.Entry{}, err
 	}
 	entry := item.Local
@@ -655,10 +679,61 @@ func moveToTrash(repo, trashRoot, rel string, now time.Time) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		return err
 	}
-	if err := os.Rename(src, dst); err != nil {
+	if err := moveFile(src, dst); err != nil {
 		return fmt.Errorf("move %q to trash: %w", rel, err)
 	}
 	return nil
+}
+
+// moveFile renames src to dst and falls back to copy+remove on EXDEV when the
+// sync folder and the local trash directory live on different filesystems.
+func moveFile(src, dst string) error {
+	err := os.Rename(src, dst)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, unix.EXDEV) {
+		return err
+	}
+	return copyAndRemove(src, dst)
+}
+
+func copyAndRemove(src, dst string) error {
+	fi, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(src)
+		if err != nil {
+			return err
+		}
+		_ = os.Remove(dst)
+		if err := os.Symlink(target, dst); err != nil {
+			return err
+		}
+		return os.Remove(src)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fi.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		_ = os.Remove(dst)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	_ = os.Chtimes(dst, fi.ModTime(), fi.ModTime())
+	return os.Remove(src)
 }
 
 func pruneEmptyDirs(repo string, deleted map[string]bool) {
@@ -675,7 +750,7 @@ func pruneEmptyDirs(repo string, deleted map[string]bool) {
 	}
 }
 
-func applyDirMetadata(repo string, remote *store.Manifest) error {
+func applyDirMetadata(root *os.Root, remote *store.Manifest) error {
 	var dirs []store.Entry
 	for _, e := range remote.Entries {
 		if e.Type == store.TypeDir {
@@ -684,18 +759,18 @@ func applyDirMetadata(repo string, remote *store.Manifest) error {
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Path > dirs[j].Path })
 	for _, e := range dirs {
-		dst := filepath.Join(repo, filepath.FromSlash(e.Path))
-		if _, err := os.Stat(dst); err != nil {
+		p := filepath.FromSlash(e.Path)
+		if _, err := root.Stat(p); err != nil {
 			continue
 		}
 		if e.Mode != 0 {
-			if err := os.Chmod(dst, store.UnixToMode(e.Mode)); err != nil {
+			if err := root.Chmod(p, store.UnixToMode(e.Mode)); err != nil {
 				return err
 			}
 		}
 		if e.MtimeNS > 0 {
 			t := time.Unix(0, e.MtimeNS)
-			if err := os.Chtimes(dst, t, t); err != nil {
+			if err := root.Chtimes(p, t, t); err != nil {
 				return err
 			}
 		}
