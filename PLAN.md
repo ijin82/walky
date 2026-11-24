@@ -69,7 +69,7 @@ hardware/session checks remain.
       not running.
 - [x] StatusNotifierItem tray icon owned by the daemon; no Background portal.
 - [x] GUI initialization wizard on top of the shared setup code.
-- [ ] Manual checks MT-10…MT-14 and MT-20…MT-24 on a real session.
+- [ ] Run the manual acceptance checklist below on real hardware/session.
 
 ### P1 — drive lifecycle
 
@@ -152,7 +152,72 @@ hardware/session checks remain.
 4. `make install-local` has been run.
 5. Manual-only checks affected by the change are updated in
    [docs/MANUAL_TESTS.md](docs/MANUAL_TESTS.md).
-6. Commit only on explicit request.
+6. Commit per `AGENTS.md` §7 (temporary auto-commit after a green `make check`,
+   otherwise only on request).
+
+## Manual acceptance checklist
+
+Automated coverage is `make check`; this list is for what needs a real drive,
+LUKS prompt, GNOME session, suspend or power loss. Steps and expected results
+are in [docs/MANUAL_TESTS.md](docs/MANUAL_TESTS.md); run the affected items for
+every change and all of them before a release.
+
+### Storage and recovery
+
+- [ ] MT-01 CLI init, repeat init rejected, nothing outside `/WALKY`
+- [ ] MT-02 first snapshot of 15 GB and `verify --full`, record time/RSS
+- [ ] MT-03 increment: only changed files hashed, store grows by the diff
+- [ ] MT-04 restore on a clean machine: content, modes, symlinks, mtimes, `git fsck`
+- [ ] MT-05 unplug mid-snapshot: old `HEAD` intact, `verify` passes
+- [ ] MT-06 corrupt pack/object: `verify` fails, `restore` refuses
+- [ ] MT-07 no free space: clear error, `HEAD` intact, drive mountable
+- [ ] MT-08 real USB 3.0/2.0 throughput recorded
+- [ ] MT-09 retention/GC on a real drive: dry-run, kept buckets, space freed
+- [ ] MT-10 trash: list, restore, expiry, `gc --trash-days 0`
+
+### Setup and configuration
+
+- [ ] MT-11 GUI "Set up a drive" initializes and starts the first sync
+- [ ] MT-12 GUI "Use this drive" adopts an existing store without rewriting it
+- [ ] MT-13 `walky init --repo` writes config and the daemon attaches
+- [ ] MT-14 non-LUKS warning is advisory; LUKS drive needs no passphrase from Walky
+
+### Drive lifecycle and daemon
+
+- [ ] MT-15 plug detection and automount with the configured label
+- [ ] MT-16 autosync on attach, one notification, recent files update
+- [ ] MT-17 safe eject during or after a sync
+- [ ] MT-18 suspend during a commit, resume cleanly
+- [ ] MT-19 daemon restart mid-sync, no data loss
+- [ ] MT-20 daemon stopped: friendly banner with Start, no raw GDBus error
+- [ ] MT-21 enable the service, log out/in, daemon and tray start automatically
+- [ ] MT-22 tray Quit stops daemon and UI; window Quit keeps the daemon
+
+### Two-way sync
+
+- [ ] MT-23 two-machine conflict keeps both variants with the documented name
+- [ ] MT-24 deletion on A does not resurrect from B's stale copy
+- [ ] MT-25 offline machine returns after many changes: clean 3-way merge
+
+### Desktop UI and tray
+
+- [ ] MT-26 window shows state, device, generation, progress, last five files
+- [ ] MT-27 symbolic tray icon recolors in light/dark themes; menu actions work
+- [ ] MT-28 exactly one notification per sync/error event
+- [ ] MT-29 settings (excludes, retention, conflict) apply and persist across restart
+
+### Installer and packaging
+
+- [ ] MT-30 local install: one launcher, transparent icon corners, symbolic tray
+- [ ] MT-31 service menu/commands: status, enable, start, stop, disable
+- [ ] MT-32 uninstall stops/disables the service and keeps data/config;
+      reinstall leaves one launcher
+
+### Durability
+
+- [ ] MT-33 hard power loss at several commit moments: `HEAD` old or complete,
+      `verify` passes, GC cleans up
+- [ ] MT-34 attach/detach loop: no stuck lock, duplicate sync or leak
 
 ## Open questions
 
@@ -161,7 +226,8 @@ hardware/session checks remain.
 3. Transparent `current/` tree on the drive (hardlink farm, ext4 only)?
 4. One drive or two for rotation?
 5. Keep both `local-wins` and `newest` conflict policies, or only “keep both”?
-6. Tray menu: is “Quit” expected to stop only the daemon, or the UI too?
+6. Tray menu: “Quit Walky” stops the daemon and closes the UI; the window's
+   Quit keeps the daemon and tray running. Is that the right split?
 
 ## Accepted decisions
 
