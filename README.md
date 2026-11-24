@@ -222,8 +222,18 @@ runs. Without a running daemon, `walky status` falls back to local information.
 ./install.sh uninstall-system
 ```
 
-Running `./install.sh` without arguments opens a menu with the same four
-operations (install for me, install system-wide, uninstall, uninstall system).
+Running `./install.sh` without arguments opens a menu:
+
+1. install for the current user,
+2. install system-wide,
+3. stop the service and uninstall the user copy,
+4. uninstall the system copy,
+5. service status (enable/disable the user service).
+
+`./install.sh local` prints the unit path, whether it is enabled and active, and
+offers to enable and start it. `./install.sh service`, `enable` and `disable`
+manage the user service non-interactively. Uninstalling stops and disables the
+service before removing the unit.
 
 The script builds both binaries and installs `walky`, `walky-ui`, the desktop
 entry and a systemd user unit. The local mode needs no root and rewrites the unit

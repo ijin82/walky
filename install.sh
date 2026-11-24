@@ -21,6 +21,113 @@ fi
 info() { echo "==> $*"; }
 warn() { echo "!!! $*" >&2; }
 
+USER_UNIT="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/walky.service"
+SYSTEM_UNIT="/usr/lib/systemd/user/walky.service"
+
+systemd_available() {
+    command -v systemctl >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ]
+}
+
+service_enabled() {
+    systemctl --user is-enabled walky.service 2>/dev/null || true
+}
+
+service_active() {
+    systemctl --user is-active walky.service 2>/dev/null || true
+}
+
+service_status() {
+    local enabled active unit
+    enabled="$(service_enabled)"
+    active="$(service_active)"
+    if [ -f "${USER_UNIT}" ]; then
+        unit="${USER_UNIT}"
+    elif [ -f "${SYSTEM_UNIT}" ]; then
+        unit="${SYSTEM_UNIT} (system)"
+    else
+        unit="not installed"
+    fi
+    echo "  Unit:    ${unit}"
+    echo "  Enabled: ${enabled:-unknown}"
+    echo "  Active:  ${active:-unknown}"
+    echo "  Binaries: $(command -v walky 2>/dev/null || echo "not in PATH")"
+}
+
+enable_service() {
+    if ! systemd_available; then
+        warn "systemd user session is not available; start it manually: walky daemon"
+        return 1
+    fi
+    systemctl --user enable --now walky.service
+    info "walky.service enabled and started"
+}
+
+disable_service() {
+    if ! systemd_available; then
+        return 0
+    fi
+    systemctl --user disable --now walky.service 2>/dev/null || true
+    info "walky.service stopped and disabled"
+}
+
+offer_service() {
+    local answer
+    if ! systemd_available; then
+        echo "  systemd is not available here; run 'walky daemon' manually."
+        return 0
+    fi
+    if [ "$(service_active)" = "active" ]; then
+        echo "  The background service is already running."
+        return 0
+    fi
+    printf "  Enable and start Walky in the background now? [Y/n]: "
+    if ! read -r answer; then
+        echo
+        echo "  Later: systemctl --user enable --now walky.service"
+        return 0
+    fi
+    case "${answer}" in
+        n|N|no|NO)
+            echo "  Skipped. Later: systemctl --user enable --now walky.service"
+            ;;
+        *)
+            enable_service
+            ;;
+    esac
+}
+
+manage_service() {
+    local answer
+    echo
+    echo "  Walky background service"
+    service_status
+    echo
+    if [ ! -f "${USER_UNIT}" ] && [ ! -f "${SYSTEM_UNIT}" ]; then
+        echo "  Install first, then the service can be enabled."
+        return 0
+    fi
+    if ! systemd_available; then
+        return 0
+    fi
+    if [ "$(service_active)" = "active" ]; then
+        printf "  Stop and disable it? [y/N]: "
+        if read -r answer; then
+            case "${answer}" in
+                y|Y|yes|YES) disable_service ;;
+                *) echo "  Left running." ;;
+            esac
+        fi
+    else
+        printf "  Enable and start it? [Y/n]: "
+        if read -r answer; then
+            case "${answer}" in
+                n|N|no|NO) echo "  Left disabled." ;;
+                *) enable_service ;;
+            esac
+        fi
+    fi
+}
+
 usage() {
     cat <<'USAGE'
 Usage: ./install.sh [command]
@@ -32,6 +139,9 @@ Commands:
   system            Build and install system-wide under /usr (requires root)
   uninstall         Remove the current-user installation
   uninstall-system  Remove the system installation (requires root)
+  service           Show service status, enable or disable it
+  enable            Enable and start the user service
+  disable           Stop and disable the user service
   help              Show this help
 
 Examples:
@@ -45,10 +155,11 @@ install_local() {
     info "installing for ${USER} into ~/.local"
     make install-local
     echo
-    echo "Done. Start the daemon and the window with:"
-    echo "  systemctl --user daemon-reload"
-    echo "  systemctl --user enable --now walky.service"
-    echo "  walky-ui"
+    echo "Done."
+    service_status
+    offer_service
+    echo
+    echo "Start the window with: walky-ui"
 }
 
 install_system() {
@@ -60,13 +171,16 @@ install_system() {
     info "installing system-wide under /usr"
     make install install-data
     echo
-    echo "Done. Enable the user service for each user with:"
-    echo "  systemctl --user daemon-reload"
-    echo "  systemctl --user enable --now walky.service"
+    echo "Done."
+    echo "  The unit is in ${SYSTEM_UNIT}."
+    echo "  Each user enables it for their own session:"
+    echo "    systemctl --user daemon-reload"
+    echo "    systemctl --user enable --now walky.service"
 }
 
 uninstall_local() {
     info "removing the current-user installation"
+    disable_service
     make uninstall-local
     echo "Done."
 }
@@ -111,14 +225,15 @@ interactive_menu() {
 
     1) Install for me        build and install into ~/.local (no root)
     2) Install system-wide   build and install under /usr (requires root)
-    3) Uninstall             remove the current-user installation
+    3) Uninstall             stop the service and remove the current-user install
     4) Uninstall system      remove the system installation (root)
+    5) Service               show status, enable/disable the user service
     q) Quit
 
 MENU
 
     while true; do
-        printf "  Choose [1/2/3/4/q]: "
+        printf "  Choose [1/2/3/4/5/q]: "
         if ! read -r choice; then
             echo
             return 0
@@ -142,13 +257,17 @@ MENU
                 uninstall_system
                 return 0
                 ;;
+            5|service)
+                manage_service
+                return 0
+                ;;
             q|Q|quit|exit)
                 echo "  Nothing to do."
                 return 0
                 ;;
             "") ;;
             *)
-                echo "  Please choose 1, 2, 3, 4 or q."
+                echo "  Please choose 1, 2, 3, 4, 5 or q."
                 ;;
         esac
     done
@@ -160,6 +279,9 @@ case "${1:-menu}" in
     system) install_system ;;
     uninstall) uninstall_local ;;
     uninstall-system) uninstall_system ;;
+    service) manage_service ;;
+    enable) enable_service ;;
+    disable) disable_service ;;
     -h|--help|help) usage ;;
     *)
         echo "Unknown command: $1" >&2
