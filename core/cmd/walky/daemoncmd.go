@@ -15,7 +15,6 @@ import (
 	"walky/internal/engine"
 	"walky/internal/machineid"
 	"walky/internal/state"
-	"walky/internal/store"
 	"walky/internal/version"
 )
 
@@ -72,6 +71,8 @@ func cmdDaemon(args []string) error {
 		Machine:       machine,
 		AutoSync:      cfg.Device.AutoSync,
 		AutoMount:     cfg.Device.AutoMount,
+		AutoGC:        cfg.Maintenance.AutoGC,
+		GCInterval:    time.Duration(cfg.Maintenance.GCIntervalHours) * time.Hour,
 		StoreOverride: *deviceRoot,
 		Interval:      *interval,
 		Mode:          string(cfg.Sync.Mode),
@@ -82,6 +83,7 @@ func cmdDaemon(args []string) error {
 		Retention: daemon.RetentionSettings{
 			Daily: cfg.Retention.Daily, Weekly: cfg.Retention.Weekly,
 			Monthly: cfg.Retention.Monthly, TrashDays: cfg.Retention.TrashDays,
+			MachineDays: cfg.Retention.MachineDays,
 		},
 	}, log)
 
@@ -143,7 +145,7 @@ func directSync(cfgPath, storePath, repoPath string) error {
 	if storePath == "" {
 		return errors.New("--store is required with --direct")
 	}
-	if err := store.CheckFilesystem(storePath); err != nil {
+	if err := filesystemCheck(storePath); err != nil {
 		return err
 	}
 	if isInside(repo, storePath) || isInside(storePath, repo) {

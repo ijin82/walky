@@ -23,6 +23,11 @@ type GCOptions struct {
 	KeepMonthly int
 	TrashDays   int
 	DryRun      bool
+	// MachineMaxAgeDays removes machine records that have not synced for that
+	// long (0 disables pruning).
+	MachineMaxAgeDays int
+	// KeepMachine is never pruned (the current machine).
+	KeepMachine string
 	// Now overrides the clock (tests).
 	Now time.Time
 }
@@ -36,6 +41,7 @@ type GCReport struct {
 	RemovedPacks       int
 	CompactedPacks     int
 	ExpiredTrash       int
+	RemovedMachines    int
 	FreedBytes         int64
 	Warnings           []string
 }
@@ -70,7 +76,7 @@ func (s *Store) GC(opts GCOptions) (*GCReport, error) {
 		return nil, err
 	}
 	keep := map[int64]struct{}{head.Gen: {}}
-	s.keepMachineBases(keep, rep)
+	s.keepMachineBases(keep, rep, now, opts.MachineMaxAgeDays, opts.KeepMachine, opts.DryRun)
 	selectRetention(keep, snaps, opts)
 
 	gens := make([]int64, 0, len(keep))
@@ -167,8 +173,10 @@ func (s *Store) snapshotInfos() ([]snapshotInfo, error) {
 
 // keepMachineBases retains the generation each machine last synced from, so a
 // machine that returns after a long absence can still merge against its base.
-func (s *Store) keepMachineBases(keep map[int64]struct{}, rep *GCReport) {
-	entries, err := os.ReadDir(filepath.Join(s.root, machinesDir))
+// Records older than maxAgeDays are pruned unless they belong to keepID.
+func (s *Store) keepMachineBases(keep map[int64]struct{}, rep *GCReport, now time.Time, maxAgeDays int, keepID string, dryRun bool) {
+	dir := filepath.Join(s.root, machinesDir)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			rep.Warnings = append(rep.Warnings, "cannot list machines: "+err.Error())
@@ -179,7 +187,8 @@ func (s *Store) keepMachineBases(keep map[int64]struct{}, rep *GCReport) {
 		if de.IsDir() || filepath.Ext(de.Name()) != ".json" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(s.root, machinesDir, de.Name()))
+		path := filepath.Join(dir, de.Name())
+		data, err := os.ReadFile(path)
 		if err != nil {
 			rep.Warnings = append(rep.Warnings, "cannot read "+de.Name()+": "+err.Error())
 			continue
@@ -187,6 +196,17 @@ func (s *Store) keepMachineBases(keep map[int64]struct{}, rep *GCReport) {
 		var m Machine
 		if err := json.Unmarshal(data, &m); err != nil {
 			rep.Warnings = append(rep.Warnings, "cannot parse "+de.Name()+": "+err.Error())
+			continue
+		}
+		if maxAgeDays > 0 && m.ID != keepID && !m.LastSync.IsZero() &&
+			now.Sub(m.LastSync) > time.Duration(maxAgeDays)*24*time.Hour {
+			rep.RemovedMachines++
+			if !dryRun {
+				if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+					rep.Warnings = append(rep.Warnings, "cannot remove "+de.Name()+": "+err.Error())
+					continue
+				}
+			}
 			continue
 		}
 		if m.BaseGen <= 0 {

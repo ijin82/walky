@@ -37,11 +37,12 @@ const (
 
 // Config is the root of ~/.config/walky/config.toml.
 type Config struct {
-	Repo      Repo      `toml:"repo"`
-	Sync      Sync      `toml:"sync"`
-	Exclude   Exclude   `toml:"exclude"`
-	Retention Retention `toml:"retention"`
-	Device    Device    `toml:"device"`
+	Repo        Repo        `toml:"repo"`
+	Sync        Sync        `toml:"sync"`
+	Exclude     Exclude     `toml:"exclude"`
+	Retention   Retention   `toml:"retention"`
+	Maintenance Maintenance `toml:"maintenance"`
+	Device      Device      `toml:"device"`
 
 	// Path is where the config was loaded from (filled by Load).
 	Path string `toml:"-"`
@@ -71,10 +72,17 @@ type Exclude struct {
 
 // Retention controls how much history is kept on the drive.
 type Retention struct {
-	Daily     int `toml:"daily"`
-	Weekly    int `toml:"weekly"`
-	Monthly   int `toml:"monthly"`
-	TrashDays int `toml:"trash_days"`
+	Daily       int `toml:"daily"`
+	Weekly      int `toml:"weekly"`
+	Monthly     int `toml:"monthly"`
+	TrashDays   int `toml:"trash_days"`
+	MachineDays int `toml:"machine_days"`
+}
+
+// Maintenance controls periodic background work.
+type Maintenance struct {
+	AutoGC          bool `toml:"auto_gc"`
+	GCIntervalHours int  `toml:"gc_interval_hours"`
 }
 
 // Device tunes drive detection.
@@ -115,8 +123,9 @@ func Default() Config {
 			"**/*.lock",
 			"**/*.tmp",
 		}},
-		Retention: Retention{Daily: 14, Weekly: 8, Monthly: 6, TrashDays: 30},
-		Device:    Device{AutoSync: true, AutoMount: true},
+		Retention:   Retention{Daily: 14, Weekly: 8, Monthly: 6, TrashDays: 30, MachineDays: 180},
+		Maintenance: Maintenance{AutoGC: true, GCIntervalHours: 24},
+		Device:      Device{AutoSync: true, AutoMount: true},
 	}
 }
 
@@ -176,6 +185,12 @@ func (c Config) Validate() error {
 	}
 	if c.Retention.TrashDays < 0 {
 		return errors.New("retention.trash_days must be >= 0")
+	}
+	if c.Retention.MachineDays < 0 {
+		return errors.New("retention.machine_days must be >= 0")
+	}
+	if c.Maintenance.AutoGC && c.Maintenance.GCIntervalHours <= 0 {
+		return errors.New("maintenance.gc_interval_hours must be > 0 when auto_gc is enabled")
 	}
 	return nil
 }

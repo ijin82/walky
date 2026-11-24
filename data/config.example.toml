@@ -30,6 +30,11 @@ daily = 14
 weekly = 8
 monthly = 6
 trash_days = 30
+machine_days = 180
+
+[maintenance]
+auto_gc = true
+gc_interval_hours = 24
 
 [device]
 auto_sync = true

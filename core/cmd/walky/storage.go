@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"walky/internal/config"
+	"walky/internal/device"
 	"walky/internal/engine"
 	"walky/internal/machineid"
 	"walky/internal/state"
@@ -31,7 +32,7 @@ func cmdInit(args []string) error {
 		return errors.New("usage: walky init <mountpoint> [--force]")
 	}
 
-	if err := store.CheckFilesystem(fs.Arg(0)); err != nil {
+	if err := filesystemCheck(fs.Arg(0)); err != nil {
 		return err
 	}
 	st, err := store.Init(fs.Arg(0), *force)
@@ -44,6 +45,9 @@ func cmdInit(args []string) error {
 	fmt.Printf("format:  %d\n", m.Format)
 	fmt.Printf("\nPin the drive identity in ~/.config/walky/config.toml:\n\n[repo]\npath = \"~/Sync\"\nrepo_id = %q\n", m.RepoID)
 	fmt.Println("\nTip: label the filesystem WALKY (e2label /dev/sdX WALKY) so the daemon can automount it.")
+	if encrypted, known := device.EncryptionStatus(st.Root()); known && !encrypted {
+		fmt.Fprintln(os.Stderr, "warning: this drive is not encrypted. LUKS2 is strongly recommended: a lost or stolen drive exposes all data.")
+	}
 	return nil
 }
 
@@ -261,7 +265,7 @@ func openStore(path string) (*store.Store, error) {
 	if path == "" {
 		return nil, errors.New("--store is required (mount point of the Walky drive)")
 	}
-	if err := store.CheckFilesystem(path); err != nil {
+	if err := filesystemCheck(path); err != nil {
 		return nil, err
 	}
 	return store.Open(path)
@@ -311,6 +315,7 @@ func cmdGC(args []string) error {
 	weekly := fs.Int("weekly", -1, "weekly generations to keep (default: config)")
 	monthly := fs.Int("monthly", -1, "monthly generations to keep (default: config)")
 	trashDays := fs.Int("trash-days", -1, "days to keep deleted entries (default: config)")
+	machineDays := fs.Int("machine-days", -1, "days to keep idle machine records (default: config)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -325,12 +330,15 @@ func cmdGC(args []string) error {
 	if err != nil {
 		return err
 	}
+	machine, _ := machineid.Get()
 	opts := store.GCOptions{
-		KeepDaily:   cfg.Retention.Daily,
-		KeepWeekly:  cfg.Retention.Weekly,
-		KeepMonthly: cfg.Retention.Monthly,
-		TrashDays:   cfg.Retention.TrashDays,
-		DryRun:      *dryRun,
+		KeepDaily:         cfg.Retention.Daily,
+		KeepWeekly:        cfg.Retention.Weekly,
+		KeepMonthly:       cfg.Retention.Monthly,
+		TrashDays:         cfg.Retention.TrashDays,
+		MachineMaxAgeDays: cfg.Retention.MachineDays,
+		KeepMachine:       machine,
+		DryRun:            *dryRun,
 	}
 	if *daily >= 0 {
 		opts.KeepDaily = *daily
@@ -343,6 +351,9 @@ func cmdGC(args []string) error {
 	}
 	if *trashDays >= 0 {
 		opts.TrashDays = *trashDays
+	}
+	if *machineDays >= 0 {
+		opts.MachineMaxAgeDays = *machineDays
 	}
 
 	rep, err := st.GC(opts)
@@ -359,6 +370,7 @@ func cmdGC(args []string) error {
 	fmt.Printf("removed objects:     %d\n", rep.RemovedObjects)
 	fmt.Printf("removed packs:       %d (compacted %d)\n", rep.RemovedPacks, rep.CompactedPacks)
 	fmt.Printf("expired trash files: %d\n", rep.ExpiredTrash)
+	fmt.Printf("removed machines:    %d\n", rep.RemovedMachines)
 	fmt.Printf("freed:               %s\n", humanBytes(rep.FreedBytes))
 	for _, w := range rep.Warnings {
 		fmt.Printf("warning: %s\n", w)

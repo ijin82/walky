@@ -374,3 +374,39 @@ func TestAutomountCallsMounter(t *testing.T) {
 		t.Fatalf("mounter called with automount disabled")
 	}
 }
+
+func TestScheduledGCRuns(t *testing.T) {
+	root := t.TempDir()
+	st, err := store.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash, size, err := st.PutObject(strings.NewReader("alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &store.Manifest{Entries: []store.Entry{{
+		Path: "a.txt", Type: store.TypeFile, Size: size, Mode: 0o644, Hash: hash,
+	}}}
+	if _, err := st.Commit(m, store.CommitOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := New(Config{
+		RepoPath: t.TempDir(), Machine: "current",
+		AutoGC: true, GCInterval: time.Hour,
+		Retention: RetentionSettings{Daily: 1, TrashDays: 30, MachineDays: 180},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d.dev = &device.Device{StoreRoot: root, MountPoint: root, Label: "test"}
+
+	d.tryGC(context.Background())
+	found := false
+	for _, ev := range d.Events(10) {
+		if ev.Op == "gc" && ev.Result == "ok" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no gc event: %+v", d.Events(10))
+	}
+}

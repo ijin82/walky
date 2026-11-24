@@ -92,14 +92,17 @@ type Config struct {
 	Retention     RetentionSettings
 	AutoMount     bool
 	DeviceLabel   string
+	AutoGC        bool
+	GCInterval    time.Duration
 }
 
 // RetentionSettings mirrors the [retention] section for the UI.
 type RetentionSettings struct {
-	Daily     int
-	Weekly    int
-	Monthly   int
-	TrashDays int
+	Daily       int
+	Weekly      int
+	Monthly     int
+	TrashDays   int
+	MachineDays int
 }
 
 // Settings is the editable subset of the configuration.
@@ -155,6 +158,7 @@ type Daemon struct {
 	checkFS    func(string) error
 	mounter    Mounter
 	mounting   bool
+	gcRunning  bool
 
 	mu       sync.Mutex
 	emitter  Emitter
@@ -182,6 +186,9 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 	}
 	if cfg.DeviceLabel == "" {
 		cfg.DeviceLabel = device.DefaultLabel
+	}
+	if cfg.GCInterval <= 0 {
+		cfg.GCInterval = 24 * time.Hour
 	}
 	return &Daemon{
 		cfg:        cfg,
@@ -292,9 +299,15 @@ func (d *Daemon) applyConfig(cfg config.Config) error {
 	d.cfg.Mode = string(cfg.Sync.Mode)
 	d.cfg.Conflict = string(cfg.Sync.Conflict)
 	d.cfg.AutoSync = cfg.Device.AutoSync
+	d.cfg.AutoMount = cfg.Device.AutoMount
+	d.cfg.AutoGC = cfg.Maintenance.AutoGC
+	if cfg.Maintenance.GCIntervalHours > 0 {
+		d.cfg.GCInterval = time.Duration(cfg.Maintenance.GCIntervalHours) * time.Hour
+	}
 	d.cfg.Retention = RetentionSettings{
 		Daily: cfg.Retention.Daily, Weekly: cfg.Retention.Weekly,
 		Monthly: cfg.Retention.Monthly, TrashDays: cfg.Retention.TrashDays,
+		MachineDays: cfg.Retention.MachineDays,
 	}
 	d.settings = Settings{
 		Excludes:  append([]string(nil), cfg.Exclude.Patterns...),
@@ -326,6 +339,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 
 	go d.automountLoop(ctx)
+	go d.gcLoop(ctx)
 
 	events := make(chan device.Event, 8)
 	go func() {
@@ -412,6 +426,63 @@ func (d *Daemon) tryAutomount(ctx context.Context) {
 	if n > 0 {
 		d.log.Info("mounted candidate drives", "count", n)
 	}
+}
+
+func (d *Daemon) gcLoop(ctx context.Context) {
+	interval := d.cfg.GCInterval
+	if interval <= 0 {
+		interval = 24 * time.Hour
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			d.tryGC(ctx)
+		}
+	}
+}
+
+func (d *Daemon) tryGC(ctx context.Context) {
+	d.mu.Lock()
+	ready := d.cfg.AutoGC && d.dev != nil && !d.syncing && !d.gcRunning && d.cfg.StoreOverride == ""
+	dev := d.dev
+	cfg := d.cfg
+	if ready {
+		d.gcRunning = true
+	}
+	d.mu.Unlock()
+	if !ready || dev == nil {
+		return
+	}
+	defer func() {
+		d.mu.Lock()
+		d.gcRunning = false
+		d.mu.Unlock()
+	}()
+
+	st, err := store.Open(dev.StoreRoot)
+	if err != nil {
+		d.log.Warn("scheduled gc: cannot open store", "err", err)
+		return
+	}
+	rep, err := st.GC(store.GCOptions{
+		KeepDaily:         cfg.Retention.Daily,
+		KeepWeekly:        cfg.Retention.Weekly,
+		KeepMonthly:       cfg.Retention.Monthly,
+		TrashDays:         cfg.Retention.TrashDays,
+		MachineMaxAgeDays: cfg.Retention.MachineDays,
+		KeepMachine:       cfg.Machine,
+	})
+	if err != nil {
+		d.log.Warn("scheduled gc failed", "err", err)
+		d.recordEvent(Event{Path: dev.StoreRoot, Op: "gc", Result: "error", Time: time.Now().Unix()})
+		return
+	}
+	d.log.Info("scheduled gc finished", "freed", rep.FreedBytes, "packs", rep.RemovedPacks)
+	d.recordEvent(Event{Path: dev.StoreRoot, Op: "gc", Result: "ok", Size: rep.FreedBytes, Time: time.Now().Unix()})
 }
 
 func (d *Daemon) overrideDevice() (device.Device, error) {

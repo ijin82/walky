@@ -310,3 +310,45 @@ func verifyOK(t *testing.T, st *Store) {
 		t.Fatalf("store is corrupt after GC: %+v", rep)
 	}
 }
+
+func TestGCMachinePruning(t *testing.T) {
+	st, err := Init(t.TempDir(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gen1 := commitTree(t, st, day(1), map[string]string{"a": "alpha"})
+	gen2 := commitTree(t, st, day(2), map[string]string{"a": "alpha", "b": "beta"})
+	gen3 := commitTree(t, st, day(3), map[string]string{"c": "gamma"})
+
+	if err := st.SaveMachine(Machine{ID: "old", BaseGen: gen1, LastSync: time.Now().Add(-400 * 24 * time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveMachine(Machine{ID: "current", BaseGen: gen2, LastSync: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := st.GC(GCOptions{
+		KeepDaily: 1, TrashDays: -1,
+		MachineMaxAgeDays: 180, KeepMachine: "current",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.RemovedMachines != 1 {
+		t.Fatalf("removed machines = %d, want 1", rep.RemovedMachines)
+	}
+	if _, err := st.LoadMachine("old"); err == nil {
+		t.Fatal("stale machine record survived GC")
+	}
+	if _, err := st.LoadMachine("current"); err != nil {
+		t.Fatalf("current machine was pruned: %v", err)
+	}
+	kept := map[int64]bool{}
+	for _, g := range rep.KeptGenerations {
+		kept[g] = true
+	}
+	if !kept[gen2] || !kept[gen3] {
+		t.Fatalf("kept = %v, want base %d and HEAD %d", rep.KeptGenerations, gen2, gen3)
+	}
+	verifyOK(t, st)
+}

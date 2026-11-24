@@ -76,7 +76,9 @@ e2label /dev/sdX WALKY
 GNOME normally mounts removable drives itself. If nothing mounts the drive, the
 daemon asks udisks2 to mount any unmounted filesystem labelled `WALKY`
 (`auto_mount = true`, on by default). LUKS is not unlocked by Walky: the desktop
-asks for the passphrase and the ext4 filesystem appears afterwards.
+asks for the passphrase and the ext4 filesystem appears afterwards. `walky init`
+prints a warning when the filesystem is not inside LUKS; it is advisory and
+never blocks initialization.
 
 ## Quick start (manual, no daemon)
 
@@ -162,11 +164,14 @@ space taken by deleted content is reclaimed immediately.
 ./bin/walky gc --store /run/media/$USER/WALKY
 ```
 
-Keeps HEAD, the requested daily/weekly/monthly generations, every machine's base
-and non-expired trash; removes unreferenced objects, deletes dead packs and
-compacts mixed ones. Deleted content stays reachable through the trash for
-`trash_days` (30 by default), so objects referenced only by trash survive until
-it expires. Run GC while the daemon is idle; `--dry-run` only reports.
+Keeps HEAD, the requested daily/weekly/monthly generations, every active
+machine's base and non-expired trash; removes unreferenced objects, deletes dead
+packs and compacts mixed ones. Machine records that have not synced for
+`machine_days` (180 by default) are pruned together with their bases. Deleted
+content stays reachable through the trash for `trash_days` (30 by default), so
+objects referenced only by trash survive until it expires. The daemon runs GC
+automatically every `maintenance.gc_interval_hours` (24 by default) while it is
+idle; `--dry-run` only reports.
 
 ## Daemon (M3)
 
@@ -207,7 +212,9 @@ systemctl --user enable --now walky.service
 ```
 
 `walky.service` is a user unit with D-Bus activation; the system-wide udev mode
-is in `data/99-walky-usb.rules` (commented out). Distribution packaging is
+is in `data/99-walky-usb.rules` (commented out). Scheduled maintenance is
+configured in `[maintenance]` (`auto_gc`, `gc_interval_hours`) and
+`[retention] machine_days`. Distribution packaging is
 deferred; the installer and README are the supported installation path for now.
 
 ## Platform support

@@ -78,27 +78,31 @@ Only manual hardware/session checks and an optional tray fallback remain.
 
 ### P2 — maintenance and long-running behaviour
 
-- [ ] Scheduled GC: systemd user timer or a daemon timer that only runs when
-      idle and not dirty.
-- [ ] Prune `machines/*.json` records that have not synced for a long time, so
-      GC can stop retaining their base generations.
-- [ ] Rotate `log/` on the drive (currently nothing writes there yet).
-- [ ] Surface GC results (freed bytes, warnings) as a daemon event for the UI.
+- [x] Scheduled GC in the daemon: every `gc_interval_hours` while idle and not
+      syncing.
+- [x] Prune `machines/*.json` records idle for `machine_days`, together with
+      their base generations.
+- [x] Surface GC results as a `gc` event and a log line with freed bytes.
+- [ ] Rotate `log/` on the drive — nothing writes there yet, so this waits for
+      on-drive logging.
 
 ### P2 — quality
 
-- [ ] CLI integration tests for `cmd/walky` (currently ~1% coverage): `init`,
-      `snapshot`, `ls`, `restore`, `verify`, `gc`, `trash`, `sync --direct`.
-- [ ] D-Bus service test over a private bus (`dbus-run-session`).
-- [ ] Fuzz the marker, manifest and pack-index parsers.
+- [x] CLI integration tests for `init`, `snapshot`, `verify`, `restore`, `gc`,
+      `trash`, `sync --direct` and config errors. The filesystem check is a
+      package seam so tests can run on temporary directories.
+- [ ] D-Bus service test over a private bus (`dbus-run-session`) — currently a
+      manual check.
+- [x] Fuzz manifest and pack-index parsers (short runs clean).
 - [ ] Fault injection with `dm-flakey`/`dm-error` on loop devices (root-only,
       documented in `docs/MANUAL_TESTS.md`).
 
 ### P2 — LUKS guidance
 
-- [ ] Non-blocking warning from `walky init` and `walky status` when the ext4
-      mount is not on dm-crypt: “LUKS2 is strongly recommended”. Never refuse,
-      never prompt; detection through mountinfo + sysfs.
+- [x] Non-blocking warning from `walky init` when the ext4 mount is not on
+      dm-crypt: “LUKS2 is strongly recommended”. Never refuses, never prompts;
+      detection walks mountinfo and sysfs slaves.
+- [ ] Expose the encryption state in `walky status` and the UI (nice-to-have).
 
 ### P3 — M8 hardening (optional)
 

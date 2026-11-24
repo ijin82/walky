@@ -102,6 +102,10 @@ func readPackIndex(path string) ([]packLoc, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parsePackIndex(data)
+}
+
+func parsePackIndex(data []byte) ([]packLoc, error) {
 	if len(data) < 8 || string(data[:4]) != packMagic {
 		return nil, errors.New("bad pack index magic")
 	}

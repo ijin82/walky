@@ -106,12 +106,13 @@ func (s *Service) GetStatus() (map[string]dbus.Variant, *dbus.Error) {
 func (s *Service) GetSettings() (map[string]dbus.Variant, *dbus.Error) {
 	st := s.d.Settings()
 	return map[string]dbus.Variant{
-		"excludes":   dbus.MakeVariant(st.Excludes),
-		"daily":      dbus.MakeVariant(int32(st.Retention.Daily)),
-		"weekly":     dbus.MakeVariant(int32(st.Retention.Weekly)),
-		"monthly":    dbus.MakeVariant(int32(st.Retention.Monthly)),
-		"trash_days": dbus.MakeVariant(int32(st.Retention.TrashDays)),
-		"conflict":   dbus.MakeVariant(st.Conflict),
+		"excludes":     dbus.MakeVariant(st.Excludes),
+		"daily":        dbus.MakeVariant(int32(st.Retention.Daily)),
+		"weekly":       dbus.MakeVariant(int32(st.Retention.Weekly)),
+		"monthly":      dbus.MakeVariant(int32(st.Retention.Monthly)),
+		"trash_days":   dbus.MakeVariant(int32(st.Retention.TrashDays)),
+		"machine_days": dbus.MakeVariant(int32(st.Retention.MachineDays)),
+		"conflict":     dbus.MakeVariant(st.Conflict),
 	}, nil
 }
 
