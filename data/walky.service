@@ -1,0 +1,23 @@
+[Unit]
+Description=Walky offline drive sync
+Documentation=man:walky(1)
+PartOf=graphical-session.target
+After=graphical-session.target
+StartLimitIntervalSec=0
+
+[Service]
+# M3: the daemon starts owning io.github.ijin.Walky1, which makes this unit
+# D-Bus activatable. Until then `walky daemon` exits after SIGTERM only.
+Type=dbus
+BusName=io.github.ijin.Walky1
+ExecStart=/usr/bin/walky daemon
+Restart=on-failure
+RestartSec=3
+Slice=background.slice
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+
+[Install]
+WantedBy=graphical-session.target

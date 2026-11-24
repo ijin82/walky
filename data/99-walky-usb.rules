@@ -1,0 +1,10 @@
+# Walky: keep the drive awake and I/O latency low.
+# Adjust ID_MODEL / ID_SERIAL for the exact stick; a broad match is risky.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="WALKY", \
+  ATTR{queue/scheduler}="none", ATTR{power/control}="on"
+
+# Headless mode only: start a system unit when the marked drive appears.
+# udev cannot start user units; the GUI session uses the udisks2 D-Bus monitor
+# instead. Uncomment together with walky@.service.
+# ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="WALKY", \
+#   TAG+="systemd", ENV{SYSTEMD_WANTS}+="walky@%k.service"
