@@ -310,24 +310,38 @@ namespace Walky {
                 child = events_list.get_first_child();
             }
 
+            string[] seen = {};
+            uint shown = 0;
             uint count = (uint) events.n_children();
-            if (count == 0) {
-                var empty = new Adw.ActionRow();
-                empty.title = "No activity yet";
-                events_list.append(empty);
-                return;
-            }
-            for (uint i = 0; i < (uint) count; i++) {
+            for (uint i = 0; i < count && shown < 5; i++) {
                 var item = events.get_child_value(i);
-                var row = new Adw.ActionRow();
-                row.title = item.get_child_value(0).get_string();
+                var path = item.get_child_value(0).get_string();
                 var op = item.get_child_value(1).get_string();
                 var result = item.get_child_value(2).get_string();
+                // Only file activity belongs under "Recent files"; attach,
+                // sync and recovery events made the list look repetitive.
+                if (op != "push" && op != "pull" && op != "delete" && op != "conflict") {
+                    continue;
+                }
+                bool duplicate = false;
+                foreach (var existing in seen) {
+                    if (existing == path) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) {
+                    continue;
+                }
+                seen += path;
+
                 int64 size = item.get_child_value(3).get_int64();
                 int64 ts = item.get_child_value(4).get_int64();
                 var time = ts > 0
                     ? new GLib.DateTime.from_unix_local(ts).format("%H:%M:%S")
                     : "";
+                var row = new Adw.ActionRow();
+                row.title = path;
                 if (size > 0) {
                     row.subtitle = "%s · %s · %s".printf(op_text(op), human_bytes(size), time);
                 } else {
@@ -337,6 +351,12 @@ namespace Walky {
                     row.subtitle += " · " + result;
                 }
                 events_list.append(row);
+                shown++;
+            }
+            if (shown == 0) {
+                var empty = new Adw.ActionRow();
+                empty.title = "No file changes yet";
+                events_list.append(empty);
             }
         }
 
