@@ -31,7 +31,8 @@ Commands:
   restore                 restore a generation into a directory
   verify                  check storage integrity
   attach <mountpoint>     adopt an existing storage                    (M4)
-  gc                      garbage-collect unreferenced objects          (M5)
+  gc                      garbage-collect unreferenced objects
+  trash <list|empty>      inspect or clear the local and drive trash
 
 Global flags:
   -config <path>   config file (default: $XDG_CONFIG_HOME/walky/config.toml)
@@ -77,7 +78,11 @@ func run(args []string) error {
 		return cmdRestore(args[1:])
 	case "verify":
 		return cmdVerify(args[1:])
-	case "attach", "gc":
+	case "gc":
+		return cmdGC(args[1:])
+	case "trash":
+		return cmdTrash(args[1:])
+	case "attach":
 		return fmt.Errorf("%q is not implemented yet (see docs/DESIGN.md milestones)", args[0])
 	default:
 		return fmt.Errorf("unknown command %q (try: walky help)", args[0])

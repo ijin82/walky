@@ -124,3 +124,35 @@ func TestCommitExpectParent(t *testing.T) {
 		t.Fatal("identical manifest reported as changed")
 	}
 }
+
+func TestTrashRecordsAndClear(t *testing.T) {
+	st, err := Init(t.TempDir(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := []Entry{{Path: "a.txt", Type: TypeFile, Size: 3, Hash: "00"}}
+	if err := st.SaveTrash(3, entries); err != nil {
+		t.Fatal(err)
+	}
+	records, err := st.TrashRecords()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].Gen != 3 || len(records[0].Entries) != 1 {
+		t.Fatalf("records = %+v", records)
+	}
+	removed, bytes, err := st.ClearTrash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 1 || bytes <= 0 {
+		t.Fatalf("cleared %d records, %d bytes", removed, bytes)
+	}
+	records, err = st.TrashRecords()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("records after clear = %+v", records)
+	}
+}

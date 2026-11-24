@@ -365,12 +365,18 @@ device.
 
 ### 4.7 Retention and GC
 
-- Policy: 14 daily + 8 weekly + 6 monthly (configurable), 30-day trash.
-- Mark: every manifest in the policy + `machines/*.json` (other machines' bases)
-  + trash.
-- Sweep: delete unmarked objects/packs; rebuild the pack catalog cache.
-- Trigger: on a schedule, when space is low, or manually with `walky gc`; never
-  during a sync and never while the dirty flag is set.
+- Policy: 14 daily + 8 weekly + 6 monthly (configurable) plus HEAD and the base
+  generation of every machine in `machines/`; 30-day trash.
+- Mark: every kept manifest and every non-expired `trash/<gen>.json` entry.
+- Sweep: unreferenced standalone objects are deleted; packs with only dead
+  entries are removed; mixed packs are rewritten into fresh packs (live objects
+  already present standalone or in retained packs are not duplicated).
+  Compaction requires free space and otherwise falls back to removing only dead
+  packs.
+- Order: objects and packs first, generation files last, so a crash never leaves
+  a manifest pointing at missing data.
+- Trigger: manually with `walky gc`, or on a schedule once the daemon grows a
+  timer; never while dirty and never without HEAD.
 
 ---
 
@@ -446,6 +452,11 @@ validated inside the daemon (labels can be forged).
 ---
 
 ## 6. UI in GNOME
+
+Implementation note (M6): the window polls `GetStatus` and `GetEvents` once per
+second instead of subscribing to signals, which keeps the Vala client small and
+avoids missed-event state. Settings, the Background portal and the tray icon are
+still to be added.
 
 ### 6.1 Window (GTK4 + libadwaita 1.8)
 
@@ -568,7 +579,7 @@ Estimates assume one developer part-time; full-time is roughly twice as fast.
 | **M5. Retention/GC** | policy, mark-sweep, trash, `walky gc` | after 100 generations GC leaves no dangling references, `verify` clean | 2–3 d |
 | **M6. UI** | window, status, progress, last 5, device, settings, notifications, portal/tray, .desktop | manual UX scenario; UI starts the daemon; nothing blocks | 4–6 d |
 | **M7. Packaging** | Makefile, rpm (ALT), install/uninstall, man, README, recovery guide, inotify sysctl | clean install on a VM | 2–3 d |
-| **M8. Hardening** | LUKS init/unlock, manifest signing, `dm-flakey`, manifest parser fuzz, 24-hour soak | 100 fault injections without data loss | 3–5 d |
+| **M8. Hardening (optional)** | optional mkfs/LUKS helper, manifest signing, `dm-flakey`, manifest parser fuzz, 24-hour soak | 100 fault injections without data loss | 3–5 d |
 
 **Done:** M0 (skeleton), M1 (storage), M2 (index + packs), M3 (daemon) and M4
 (two-way sync) — see `core/internal/{store,index,scan,engine,daemon,device,api}`:
@@ -577,8 +588,10 @@ last, `Restore` through `os.Root` with hash verification while copying,
 `Verify`, failpoint tests for commits, the SQLite hash cache and 32 MiB packs
 with a binary `.idx`, mount-table detection with marker validation, the D-Bus
 service, per-machine bases, conflict copies and conditional commits.
-`walky init` still initializes a **mounted** directory; `mkfs`/LUKS is a
-separate command in M8 (deliberately, to avoid wiping a disk by mistake).
+`walky init` only initializes a **mounted** directory and never formats a
+device. A disk-formatting helper is optional future work in M8 (deliberately,
+to avoid wiping a disk by mistake); encryption would require a LUKS container
+but is not mandatory.
 
 **MVP in a week or two:** M0–M3 in push-only mode (snapshots plus restore) is
 already a useful "history on the drive". Two-way sync is M4.

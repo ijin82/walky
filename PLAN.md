@@ -15,9 +15,9 @@ Version: `0.1.0` · updated: 2026-11-24
 | M2 | Scan index + packs for small files | ✅ done | 3–4 d |
 | M3 | Daemon: drive detection, D-Bus, systemd unit, events | ✅ done | 2–3 d |
 | M4 | Two-way sync: base, deletions, conflicts | ✅ done | 5–7 d |
-| M5 | Retention and GC | ⏳ next | 2–3 d |
-| M6 | UI: status, progress, last 5 files, eject | ⬜ planned | 4–6 d |
-| M7 | Packaging, rpm/ALT, man page, docs, sysctl | ⬜ planned | 2–3 d |
+| M5 | Retention and GC | ✅ done | 2–3 d |
+| M6 | UI: status, progress, last 5 files, eject | 🟡 MVP done | 4–6 d |
+| M7 | Packaging, rpm/ALT, man page, docs, sysctl | ⏸ deferred | 2–3 d |
 | M8 | LUKS/format, manifest signing, fuzz, fault injection | ⬜ planned | 3–5 d |
 
 Estimates assume one developer working part-time; full-time is roughly twice as
@@ -120,51 +120,71 @@ hardware and both USB 2.0 and USB 3.0.
   machine during the sync.
 - Automated tests: merge-plan table, two-machine convergence, deletions and
   trash, conflict copy / local-wins, stale-parent commit, randomized
-  200-operation convergence with store verification.
+  2000-operation convergence with store verification.
 
-Deviations recorded: tombstone entries are not stored in manifests yet —
-deletions are derived from the base, which is correct for the supported
-scenarios; a machine whose base is older than trash retention is not yet
-special-cased. Both belong to M5.
+Deviations recorded: tombstone entries are not stored in manifests; deletions
+are derived from the base, which is correct for the supported scenarios. GC now
+retains every machine's base generation, so a returning machine always has a
+manifest to merge against; explicit tombstones remain optional future work.
 
-## Next iteration — M5
+## Done: M5 — retention and GC
 
-Goal: history stays bounded and the drive does not fill up with dead objects.
+- Retention policy: 14 daily / 8 weekly / 6 monthly by default, configurable in
+  `[retention]`; HEAD is always kept, and the base generation of every known
+  machine is retained until that machine record is removed.
+- Mark phase reads every kept manifest plus non-expired `trash/*.json` entries;
+  everything else is unreachable.
+- Sweep removes unreferenced standalone objects, deletes fully dead packs and
+  compacts mixed packs into fresh ones (duplicates that also exist standalone or
+  in retained packs are not copied). Compaction checks free space first and
+  falls back to deleting only dead packs.
+- Trash files older than `trash_days` expire with their objects; snapshot files
+  for generations outside the policy are removed last.
+- `walky gc --store … [--dry-run] [--daily N] [--weekly N] [--monthly N]
+  [--trash-days N]` reports kept/removed generations, objects, packs, expired
+  trash and reclaimed bytes.
+- GC takes the store write lock, refuses to run without HEAD, and never runs
+  while another commit is in progress; it is intended to be started when the
+  daemon is idle.
+- Tests: retention, machine bases, pack compaction, duplicate handling, dry run,
+  trash expiry, missing HEAD, and 100 generations with `verify --full` after GC.
 
-- [ ] Retention policy 14 daily / 8 weekly / 6 monthly, 30-day trash.
-- [ ] Mark-and-sweep over retained manifests, `machines/*.json` bases and
-      `trash/*.json`; packs and standalone objects included.
-- [ ] `walky gc`, reclaimed-space report, safe rebuild of pack caches.
-- [ ] Guard: never run GC while dirty, during sync, or without free space.
-- [ ] Stale-base handling: warn or force a merge when a machine's base is older
-      than the oldest retained manifest.
-- [ ] Tests: GC after 100 generations leaves no dangling references; `verify`
-      stays clean; retention keeps the requested generations.
+## Done: M6 — UI MVP
 
-**M5 DoD:** `verify --full` passes after GC; objects referenced by every retained
-generation survive; space is actually reclaimed; automated tests cover the
-mark-sweep.
+- Vala/GTK4 window with libadwaita: state, device and store path, generation,
+  last sync, free space.
+- Live progress (done/total) and a "Recent files" list fed by `GetEvents`
+  every second.
+- Actions: sync now, pause/resume, verify, eject, quit; menu plus buttons.
+- Banner for errors and `Gio.Notification` when a sync finishes or fails.
+- `walky-ui` connects to the daemon over D-Bus; if the daemon is not running it
+  shows that state instead of hanging. The daemon remains the only writer.
+- Manual trash management: `walky trash list` and `walky trash empty`
+  (`--store` clears the drive trash and reclaims space, `--local` clears the
+  machine's trash, `--dry-run` reports).
 
-## Later milestones
+Remaining for a full M6: settings UI (excludes, retention, conflict policy),
+Background portal / StatusNotifierItem so the app is visible after closing the
+window, and starting the daemon from the UI when it is not running.
 
-### M6 — UI
+## Next iteration — M6 follow-ups
 
-- [ ] libadwaita window: status, progress, throughput, ETA.
-- [ ] "Last 5 files" plus a full event list from `GetEvents`.
-- [ ] Device card: label, UUID, free space, "Eject".
-- [ ] Settings: excludes, retention, conflict policy.
-- [ ] Notifications, Background portal and/or SNI tray icon.
-- [ ] UI starts the daemon over D-Bus and never blocks sync.
+- [ ] Settings window: excludes, retention, conflict policy (write the config).
+- [ ] Background portal or SNI tray icon; keep the app visible when the window
+      is closed.
+- [ ] Start the daemon over D-Bus (systemd activation) when unavailable.
+- [ ] Manual checks MT-20…MT-22 in `docs/MANUAL_TESTS.md`.
+Packaging is deferred at the user's request; the installation path for now is
+`./install.sh` plus this README.
 
-### M7 — packaging
+### M8 — hardening (optional, not required)
 
-- [ ] `rpm` spec for ALT, `make install` + `install-data`.
-- [ ] man page, README, recovery guide.
-- [ ] inotify sysctl and udev rule shipped in the package.
+Nothing here is needed to use an existing, already-formatted drive.
+`walky format` would be a convenience for blank drives, and encryption is the
+only feature that requires creating a new filesystem/LUKS container.
 
-### M8 — hardening
-
-- [ ] `walky format`: mkfs.ext4 + LUKS2, confirmation, refuse mounted devices.
+- [ ] Optional `walky format`: mkfs.ext4 (+LUKS2), confirmation, refuse mounted
+      devices. Never invoked implicitly.
 - [ ] Keyfile/passphrase, optionally TPM.
 - [ ] Manifest signing (ed25519), `repo_id` allowlist.
 - [ ] `dm-flakey`/`dm-error`, fuzz manifest and `.idx` parsers, 24-hour soak.

@@ -36,6 +36,8 @@ type Meta struct {
 type CommitOptions struct {
 	Machine string
 	Message string
+	// Created overrides the generation timestamp (tests and imports).
+	Created time.Time
 	// ExpectParent, when non-nil, aborts the commit unless HEAD still points at
 	// that generation. It prevents overwriting a generation written by another
 	// machine while this sync was running.
@@ -142,13 +144,17 @@ func (s *Store) commitLocked(m *Manifest, opts CommitOptions) (CommitResult, err
 
 	gen := parent + 1
 	entries, files, bytesTotal := m.Stats()
+	created := opts.Created
+	if created.IsZero() {
+		created = time.Now().UTC()
+	}
 	meta := Meta{
 		Format:         FormatVersion,
 		Gen:            gen,
 		Parent:         parent,
 		Machine:        opts.Machine,
 		Message:        opts.Message,
-		Created:        time.Now().UTC(),
+		Created:        created,
 		Entries:        entries,
 		Files:          files,
 		Bytes:          bytesTotal,

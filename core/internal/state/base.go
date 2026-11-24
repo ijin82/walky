@@ -30,3 +30,52 @@ func TrashDir() (string, error) {
 func EnsureDir(path string) error {
 	return os.MkdirAll(path, 0o700)
 }
+
+// TrashStats describes local trash contents.
+type TrashStats struct {
+	Files int
+	Bytes int64
+}
+
+// LocalTrashStats measures the local trash without changing it.
+func LocalTrashStats() (TrashStats, error) {
+	dir, err := TrashDir()
+	if err != nil {
+		return TrashStats{}, err
+	}
+	var st TrashStats
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		st.Files++
+		st.Bytes += info.Size()
+		return nil
+	})
+	if os.IsNotExist(err) {
+		return TrashStats{}, nil
+	}
+	return st, err
+}
+
+// ClearLocalTrash removes everything under the local trash directory.
+func ClearLocalTrash() (TrashStats, error) {
+	dir, err := TrashDir()
+	if err != nil {
+		return TrashStats{}, err
+	}
+	st, err := LocalTrashStats()
+	if err != nil {
+		return st, err
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return st, err
+	}
+	return st, nil
+}

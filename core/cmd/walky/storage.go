@@ -294,3 +294,67 @@ func humanBytes(n int64) string {
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
+
+func cmdGC(args []string) error {
+	fs := flag.NewFlagSet("gc", flag.ContinueOnError)
+	cfgPath, verbose := commonFlags(fs)
+	storePath := fs.String("store", "", "mount point of the Walky drive")
+	dryRun := fs.Bool("dry-run", false, "report what would be removed")
+	daily := fs.Int("daily", -1, "daily generations to keep (default: config)")
+	weekly := fs.Int("weekly", -1, "weekly generations to keep (default: config)")
+	monthly := fs.Int("monthly", -1, "monthly generations to keep (default: config)")
+	trashDays := fs.Int("trash-days", -1, "days to keep deleted entries (default: config)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	_ = cfgPath
+	setupLog(*verbose)
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	st, err := openStore(*storePath)
+	if err != nil {
+		return err
+	}
+	opts := store.GCOptions{
+		KeepDaily:   cfg.Retention.Daily,
+		KeepWeekly:  cfg.Retention.Weekly,
+		KeepMonthly: cfg.Retention.Monthly,
+		TrashDays:   cfg.Retention.TrashDays,
+		DryRun:      *dryRun,
+	}
+	if *daily >= 0 {
+		opts.KeepDaily = *daily
+	}
+	if *weekly >= 0 {
+		opts.KeepWeekly = *weekly
+	}
+	if *monthly >= 0 {
+		opts.KeepMonthly = *monthly
+	}
+	if *trashDays >= 0 {
+		opts.TrashDays = *trashDays
+	}
+
+	rep, err := st.GC(opts)
+	if err != nil {
+		return err
+	}
+	if rep.DryRun {
+		fmt.Println("dry run: nothing was deleted")
+	}
+	fmt.Printf("kept generations:    %v\n", rep.KeptGenerations)
+	if len(rep.RemovedGenerations) > 0 {
+		fmt.Printf("removed generations: %v\n", rep.RemovedGenerations)
+	}
+	fmt.Printf("removed objects:     %d\n", rep.RemovedObjects)
+	fmt.Printf("removed packs:       %d (compacted %d)\n", rep.RemovedPacks, rep.CompactedPacks)
+	fmt.Printf("expired trash files: %d\n", rep.ExpiredTrash)
+	fmt.Printf("freed:               %s\n", humanBytes(rep.FreedBytes))
+	for _, w := range rep.Warnings {
+		fmt.Printf("warning: %s\n", w)
+	}
+	return nil
+}

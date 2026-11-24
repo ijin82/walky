@@ -5,11 +5,11 @@ remote server of Dropbox/Yandex Disk: version history, deduplication, conflict
 handling and restore onto a new machine. No internet is required — the transport
 is physical.
 
-Status: **M0–M4**. Storage, daemon and two-way sync work: `init`, `snapshot`,
-`ls`, `head`, `restore`, `verify`, `daemon`, `status`, `sync`, `eject` — blake3
-CAS, generations, atomic commits, restore onto a clean machine, a hash index,
-packs, drive detection and bidirectional sync with conflict handling. The UI is
-still a skeleton.
+Status: **M0–M6**. Storage, daemon, two-way sync, GC, manual trash management
+and a GTK4 window work: `init`, `snapshot`, `ls`, `head`, `restore`, `verify`,
+`daemon`, `status`, `sync`, `eject`, `gc`, `trash` — blake3 CAS, generations,
+atomic commits, packs, drive detection, conflict handling and a desktop UI.
+Settings, a tray indicator and packaging are still to come.
 Architecture — [docs/DESIGN.md](docs/DESIGN.md), status and plan —
 [PLAN.md](PLAN.md).
 
@@ -41,7 +41,7 @@ independently (`core/` uses `go build`, `ui/` uses `valac`).
 make check          # gofmt + go vet + go test + build both binaries
 make cover          # per-package test coverage
 make build          # bin/walky, bin/walky-ui
-make install-local  # no root: ~/.local/bin + .desktop
+./install.sh        # build and install for the current user
 make run-ui         # start the window
 ./bin/walky version
 ./bin/walky status --json
@@ -55,10 +55,26 @@ GTK4/libadwaita vapi files. Meson is not needed: the UI builds through a short
 into `~/.local/share/applications`, so the current build is what runs, without
 sudo. The version comes from [VERSION](VERSION).
 
-## Quick start (M1–M2, no daemon)
+## Do I need to format the drive?
+
+No. Walky never formats anything and does not require a special layout. Mount
+the drive (GNOME does this automatically), then initialize the store:
 
 ```sh
-# the drive is already formatted as ext4 and mounted
+./bin/walky init /run/media/$USER/WALKY/WALKY
+```
+
+Any writable filesystem works. ext4 is recommended because it preserves file
+modes, symlinks and hardlinks; exFAT works for plain files but is
+case-insensitive and stores neither permissions nor symlinks. Encryption is
+optional and would require creating a LUKS container (M8), which is the only
+case where reformatting is needed. The optional `walky format` helper is a
+convenience for blank drives, never a prerequisite.
+
+## Quick start (manual, no daemon)
+
+```sh
+# the drive is already mounted
 ./bin/walky init /run/media/$USER/WALKY
 ./bin/walky snapshot --store /run/media/$USER/WALKY --repo ~/Sync
 ./bin/walky ls --store /run/media/$USER/WALKY --long
@@ -68,13 +84,13 @@ sudo. The version comes from [VERSION](VERSION).
 ./bin/walky restore --store /run/media/$USER/WALKY --dest ~/Restored
 ```
 
-`--store` is the drive mount point, `--repo` is the synchronized folder. `init`
-does not format the drive: mkfs/LUKS will be a separate command (`walky format`)
-so a disk cannot be wiped by accident.
+`--store` is the store directory on the drive, `--repo` is the synchronized
+folder. `init` creates the directory if needed and never formats a device, so a
+disk cannot be wiped by accident.
 
-Current limitations: no GC or retention yet (M5), no UI (M6). The daemon only uses drives the desktop has
-already mounted; auto-mounting through udisks2 without a polkit prompt is a
-follow-up. Formatting and LUKS are a separate command in M8.
+Current limitations: the UI has no settings or tray indicator yet, packaging is
+deferred, and the daemon only uses drives the desktop has already mounted;
+auto-mounting through udisks2 without a polkit prompt is a follow-up.
 
 A repeated snapshot does not rehash the tree: the cache in
 `~/.local/state/walky` compares `(dev, ino, size, mtime, ctime)`. To reset it,
@@ -100,6 +116,42 @@ both sides changed the same file a conflict copy
 on the drive. The commit is conditional on the generation the merge started
 from, so a concurrent writer is reported instead of overwritten.
 
+## UI (M6)
+
+```sh
+make run-ui          # or ~/.local/bin/walky-ui
+```
+
+The window shows daemon state, device, generation, last sync, free space, live
+progress and the last five files, with buttons for sync, pause, verify and
+eject. It polls the daemon over D-Bus once per second and never writes to the
+store itself. Settings and a tray/background indicator are not implemented yet.
+
+## Trash
+
+```sh
+./bin/walky trash list --store /run/media/$USER/WALKY
+./bin/walky trash empty --store /run/media/$USER/WALKY   # drive trash + GC
+./bin/walky trash empty --local                          # machine trash
+./bin/walky trash empty --store … --dry-run
+```
+
+Clearing the drive trash also runs GC with the configured retention, so the
+space taken by deleted content is reclaimed immediately.
+
+## Retention and GC (M5)
+
+```sh
+./bin/walky gc --store /run/media/$USER/WALKY --dry-run
+./bin/walky gc --store /run/media/$USER/WALKY
+```
+
+Keeps HEAD, the requested daily/weekly/monthly generations, every machine's base
+and non-expired trash; removes unreferenced objects, deletes dead packs and
+compacts mixed ones. Deleted content stays reachable through the trash for
+`trash_days` (30 by default), so objects referenced only by trash survive until
+it expires. Run GC while the daemon is idle; `--dry-run` only reports.
+
 ## Daemon (M3)
 
 ```sh
@@ -118,18 +170,31 @@ runs. Without a running daemon, `walky status` falls back to local information.
 `sudo make install install-data` installs the system-wide one. Enable it with
 `systemctl --user enable --now walky.service` (not enabled automatically).
 
-## Installation (after M3)
+## Installation
 
 ```sh
-sudo make install install-data
+./install.sh              # build and install for the current user (~/.local)
+./install.sh system       # system-wide, requires root (/usr)
+./install.sh uninstall    # remove the user installation
+./install.sh uninstall-system
+```
+
+The script builds both binaries and installs `walky`, `walky-ui`, the desktop
+entry and a systemd user unit. The local mode needs no root and rewrites the unit
+to use `%h/.local/bin/walky`; it does not enable the service. After a system
+install:
+
+```sh
 systemctl --user daemon-reload
 systemctl --user enable --now walky.service
 ```
 
 `walky.service` is a user unit with D-Bus activation; the system-wide udev mode
-is in `data/99-walky-usb.rules` (commented out).
+is in `data/99-walky-usb.rules` (commented out). Distribution packaging is
+deferred; the installer and README are the supported installation path for now.
 
 ## Data safety
 
 The drive is not a backup. Until a second replica exists, losing the drive means
-losing the data. The target filesystem is ext4 + LUKS2 (encryption lands in M8).
+losing the data. ext4 is recommended, LUKS2 encryption is optional and planned
+for M8; neither is required to start using an existing drive.

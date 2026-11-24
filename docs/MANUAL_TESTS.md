@@ -138,7 +138,10 @@ variants survive, the conflict copy is named
 Delete a file on machine A, sync, then attach machine B. Expected: the file is
 deleted on B and kept in the trash, not restored from B's stale copy.
 
-## UI (M6) — pending implementation
+## UI (M6)
+
+Automated tests cover the D-Bus API; the checks below require a graphical
+session.
 
 ### MT-20 Window and status
 
