@@ -16,7 +16,7 @@ Version: `0.1.0` · updated: 2026-11-24
 | M3 | Daemon: drive detection, D-Bus, systemd unit, events | ✅ done |
 | M4 | Two-way sync: bases, deletions, conflicts, trash | ✅ done |
 | M5 | Retention and GC | ✅ done |
-| M6 | Desktop UI | 🟡 MVP done |
+| M6 | Desktop UI | ✅ done (tray optional) |
 | M7 | Packaging (rpm/ALT, man page) | ⏸ deferred |
 | M8 | Optional hardening (format helper, encryption tooling) | ⬜ optional |
 
@@ -50,7 +50,12 @@ Version: `0.1.0` · updated: 2026-11-24
 
 ## Remaining work
 
-### P1 — finish the desktop experience
+### P1 — finished
+
+Settings, background mode, daemon autostart and udisks automount are in place.
+Only manual hardware/session checks and an optional tray fallback remain.
+
+### P1 — desktop follow-ups
 
 - [x] Settings window with immediate apply (D-Bus `GetSettings`/`SetSettings`,
       daemon validates and rewrites the config).
@@ -59,8 +64,8 @@ Version: `0.1.0` · updated: 2026-11-24
 - [x] Start `walky.service` through the user systemd manager when the daemon is
       not running.
 - [ ] Optional tray icon (StatusNotifierItem) as a fallback for desktops without
-      the Background portal.
-- [ ] Manual checks MT-20…MT-23 on a real session.
+      the Background portal (not required on GNOME).
+- [ ] Manual checks MT-10…MT-14 and MT-20…MT-23 on a real session.
 
 ### P1 — drive lifecycle
 
