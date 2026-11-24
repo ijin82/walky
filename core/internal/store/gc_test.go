@@ -352,3 +352,34 @@ func TestGCMachinePruning(t *testing.T) {
 	}
 	verifyOK(t, st)
 }
+
+func TestGCRemovesGenerationsBeforeObjects(t *testing.T) {
+	st, err := Init(t.TempDir(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashA := objectHash(t, st, "alpha")
+	gen1 := commitTree(t, st, day(1), map[string]string{"a": "alpha"})
+	commitTree(t, st, day(2), map[string]string{"b": "beta"})
+
+	// Simulate a crash right after unreferenced generation removal, before
+	// object/pack sweeping. Every remaining manifest must still be intact.
+	testHook = func(step string) error {
+		if step == "gc_before_sweep" {
+			return os.ErrClosed
+		}
+		return nil
+	}
+	defer func() { testHook = nil }()
+
+	if _, err := st.GC(GCOptions{KeepDaily: 1, TrashDays: -1}); err == nil {
+		t.Fatal("GC succeeded despite failpoint")
+	}
+	if _, _, err := st.ReadSnapshot(gen1); err == nil {
+		t.Fatal("unreferenced generation 1 still exists when sweep starts")
+	}
+	if ok, _ := st.HasObject(hashA); !ok {
+		t.Fatal("object was removed before sweep started")
+	}
+	verifyOK(t, st)
+}

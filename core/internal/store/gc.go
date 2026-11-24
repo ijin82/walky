@@ -111,15 +111,9 @@ func (s *Store) GC(opts GCOptions) (*GCReport, error) {
 		}
 	}
 
-	standalone, err := s.sweepObjects(live, rep)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.sweepPacks(live, standalone, rep); err != nil {
-		return nil, err
-	}
-
-	// Generation files go last: objects are already collected.
+	// Remove unreferenced generation files and expired trash first, then sync,
+	// so a crash before object/pack collection never leaves a manifest on disk
+	// pointing at deleted data.
 	for _, sn := range snaps {
 		if _, ok := keep[sn.gen]; ok {
 			continue
@@ -149,6 +143,24 @@ func (s *Store) GC(opts GCOptions) (*GCReport, error) {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return nil, err
 		}
+	}
+
+	if !opts.DryRun && (len(rep.RemovedGenerations) > 0 || rep.ExpiredTrash > 0) {
+		if err := s.Sync(); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := stepHook("gc_before_sweep"); err != nil {
+		return nil, err
+	}
+
+	standalone, err := s.sweepObjects(live, rep)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.sweepPacks(live, standalone, rep); err != nil {
+		return nil, err
 	}
 
 	if !opts.DryRun {
@@ -458,10 +470,12 @@ func (s *Store) sweepPacks(live map[string]struct{}, standalone map[string]bool,
 		if fi, err := os.Stat(idxPath); err == nil {
 			rep.FreedBytes += fi.Size()
 		}
-		if err := os.Remove(packPath); err != nil && !os.IsNotExist(err) {
+		// Remove the index before the pack so a crash never leaves a dangling
+		// .idx pointing at a missing .pack.
+		if err := os.Remove(idxPath); err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		if err := os.Remove(idxPath); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(packPath); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		rep.RemovedPacks++

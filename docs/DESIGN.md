@@ -376,8 +376,9 @@ device.
   already present standalone or in retained packs are not duplicated).
   Compaction requires free space and otherwise falls back to removing only dead
   packs.
-- Order: objects and packs first, generation files last, so a crash never leaves
-  a manifest pointing at missing data.
+- Order: unreferenced generation files and expired trash first (synced), then
+  objects and packs, so a crash never leaves a manifest pointing at missing
+  data.
 - Trigger: manually with `walky gc`, or on a schedule once the daemon grows a
   timer; never while dirty and never without HEAD.
 
