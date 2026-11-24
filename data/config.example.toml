@@ -13,7 +13,7 @@ workers = 0               # 0 = auto (NumCPU, capped at 8 on HDD)
 max_file_size = "8G"
 sync_on_battery = true
 # How often to look for local changes while the drive is attached; 0 disables.
-poll_seconds = 60
+poll_seconds = 180
 
 [exclude]
 patterns = [

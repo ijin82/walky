@@ -115,7 +115,7 @@ func TestDefaultExcludesVendor(t *testing.T) {
 }
 
 func TestDefaultPollSeconds(t *testing.T) {
-	if got := Default().Sync.PollSeconds; got != 60 {
-		t.Fatalf("default poll_seconds = %d, want 60", got)
+	if got := Default().Sync.PollSeconds; got != 180 {
+		t.Fatalf("default poll_seconds = %d, want 180", got)
 	}
 }
