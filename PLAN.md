@@ -91,8 +91,6 @@ hardware/session checks remain.
 - [x] Prune `machines/*.json` records idle for `machine_days`, together with
       their base generations.
 - [x] Surface GC results as a `gc` event and a log line with freed bytes.
-- [ ] Rotate `log/` on the drive — nothing writes there yet, so this waits for
-      on-drive logging.
 
 ### P2 — quality
 

@@ -167,8 +167,9 @@ filesystem check is the same with or without encryption.
     leaks source code.
 26. **Ownership on restore.** uid/gid may not match; the default is "restore as
     the current user", `--preserve-owner` is an option.
-27. **Logs on the drive** must be rotated (5 files of 1 MiB), or the log eats
-    space.
+27. **Logs stay local** (`journald` / stderr) instead of being written to the
+    drive: avoids flash wear, works when the drive is absent or fails, and
+    avoids leaking paths/hostnames on unencrypted drives.
 
 ### 3.4 Operations
 
@@ -230,7 +231,6 @@ with the store directly (for recovery on a live system and for tests).
   snapshots/00000042.meta.json# machine, parent, time, stats, signature (opt.)
   machines/<machine-id>.json  # this machine's base_gen, hostname, last_sync
   trash/<gen>.json            # entries deleted by that generation (retention)
-  log/walky-YYYYMMDD.log
   lock                        # flock
 ```
 
