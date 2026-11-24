@@ -51,6 +51,9 @@ service_status() {
     echo "  Enabled: ${enabled:-unknown}"
     echo "  Active:  ${active:-unknown}"
     echo "  Binaries: $(command -v walky 2>/dev/null || echo "not in PATH")"
+    if [ "${active}" = "active" ] && [ "${enabled}" != "enabled" ]; then
+        echo "  Note:    running now, but it will not start at login."
+    fi
 }
 
 enable_service() {
@@ -76,11 +79,18 @@ offer_service() {
         echo "  systemd is not available here; run 'walky daemon' manually."
         return 0
     fi
-    if [ "$(service_active)" = "active" ]; then
-        echo "  The background service is already running."
+    local enabled active
+    enabled="$(service_enabled)"
+    active="$(service_active)"
+    if [ "${active}" = "active" ] && [ "${enabled}" = "enabled" ]; then
+        echo "  The background service is already enabled and running."
         return 0
     fi
-    printf "  Enable and start Walky in the background now? [Y/n]: "
+    if [ "${active}" = "active" ]; then
+        printf "  Enable it so it starts at login too? [Y/n]: "
+    else
+        printf "  Enable and start Walky in the background now? [Y/n]: "
+    fi
     if ! read -r answer; then
         echo
         echo "  Later: systemctl --user enable --now walky.service"
@@ -109,12 +119,33 @@ manage_service() {
     if ! systemd_available; then
         return 0
     fi
-    if [ "$(service_active)" = "active" ]; then
-        printf "  Stop and disable it? [y/N]: "
+    local enabled active
+    enabled="$(service_enabled)"
+    active="$(service_active)"
+    if [ "${enabled}" = "enabled" ]; then
+        if [ "${active}" = "active" ]; then
+            printf "  Stop and disable it? [y/N]: "
+            if read -r answer; then
+                case "${answer}" in
+                    y|Y|yes|YES) disable_service ;;
+                    *) echo "  Left running and enabled." ;;
+                esac
+            fi
+        else
+            printf "  Start it now? [Y/n]: "
+            if read -r answer; then
+                case "${answer}" in
+                    n|N|no|NO) echo "  Left stopped." ;;
+                    *) systemctl --user start walky.service && info "walky.service started" ;;
+                esac
+            fi
+        fi
+    elif [ "${active}" = "active" ]; then
+        printf "  It is running but will not start at login. Enable it? [Y/n]: "
         if read -r answer; then
             case "${answer}" in
-                y|Y|yes|YES) disable_service ;;
-                *) echo "  Left running." ;;
+                n|N|no|NO) echo "  Left running without autostart." ;;
+                *) enable_service ;;
             esac
         fi
     else
