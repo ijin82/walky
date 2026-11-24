@@ -118,6 +118,7 @@ func Default() Config {
 		},
 		Exclude: Exclude{Patterns: []string{
 			"**/node_modules",
+			"**/vendor",
 			"**/target",
 			"**/build",
 			"**/.venv",

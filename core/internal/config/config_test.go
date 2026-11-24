@@ -101,3 +101,15 @@ func TestExpandedRepoPath(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+func TestDefaultExcludesVendor(t *testing.T) {
+	found := false
+	for _, pattern := range Default().Exclude.Patterns {
+		if pattern == "**/vendor" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("default excludes do not cover vendor")
+	}
+}

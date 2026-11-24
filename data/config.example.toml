@@ -16,6 +16,8 @@ sync_on_battery = true
 [exclude]
 patterns = [
   "**/node_modules",
+  # PHP Composer and similar dependency trees; also matches Go vendor/.
+  "**/vendor",
   "**/target",
   "**/build",
   "**/.venv",

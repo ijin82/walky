@@ -149,6 +149,11 @@ filesystems, shows whether a store already exists, lets you pick the local
 folder and initializes the store in one click. It uses the daemon, so the same
 `internal/setup` code runs for the GUI and `walky init`.
 
+Default excludes cover `node_modules`, `vendor` (PHP Composer and similar
+dependency trees, also Go `vendor/`), `target`, `build`, virtualenvs, caches and
+lock/temp files. They are edited in Settings; `**/vendor` can be removed if a
+project needs its vendored dependencies backed up.
+
 Settings (excludes, retention, conflict policy) are edited in the window and
 sent to the daemon, which validates, saves and applies them immediately; the UI
 never writes TOML itself. Note that saving rewrites the config file and drops
