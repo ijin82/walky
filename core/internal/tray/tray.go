@@ -170,20 +170,30 @@ func (t *Tray) refresh() {
 	if !changed {
 		return
 	}
+	icon := iconName(snap)
 	title := "Walky — " + stateText(snap.State)
 	subtitle := "No drive"
 	if snap.Device != "" {
 		subtitle = fmt.Sprintf("%s · generation %d", snap.Device, snap.Generation)
 	}
 	if t.props != nil {
+		t.props.SetMust(sniIface, "IconName", icon)
 		t.props.SetMust(sniIface, "Title", title)
 		t.props.SetMust(sniIface, "ToolTip", toolTip{
-			IconName: "walky-symbolic", IconPixmap: []pixmap{}, Title: title, Subtitle: subtitle,
+			IconName: icon, IconPixmap: []pixmap{}, Title: title, Subtitle: subtitle,
 		})
 	}
+	_ = t.conn.Emit(sniPath, sniIface+".NewIcon")
 	_ = t.conn.Emit(sniPath, sniIface+".NewTitle")
 	_ = t.conn.Emit(sniPath, sniIface+".NewToolTip")
 	t.menu.bump()
+}
+
+func iconName(snap Snapshot) string {
+	if snap.Paused || snap.State == "paused" {
+		return "walky-paused-symbolic"
+	}
+	return "walky-symbolic"
 }
 
 // Activate opens the window on a left click.

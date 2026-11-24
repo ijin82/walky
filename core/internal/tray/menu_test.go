@@ -95,3 +95,15 @@ func TestMenuSeparator(t *testing.T) {
 		t.Fatalf("separator props = %v", sep.Props)
 	}
 }
+
+func TestIconNamePaused(t *testing.T) {
+	if got := iconName(Snapshot{State: "idle"}); got != "walky-symbolic" {
+		t.Fatalf("idle icon = %q", got)
+	}
+	if got := iconName(Snapshot{State: "idle", Paused: true}); got != "walky-paused-symbolic" {
+		t.Fatalf("paused flag icon = %q", got)
+	}
+	if got := iconName(Snapshot{State: "paused"}); got != "walky-paused-symbolic" {
+		t.Fatalf("paused state icon = %q", got)
+	}
+}
