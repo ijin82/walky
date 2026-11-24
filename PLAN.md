@@ -18,7 +18,7 @@ Version: `0.1.0` · updated: 2026-11-24
 | M5 | Retention and GC | ✅ done |
 | M6 | Desktop UI | ✅ done |
 | M7 | Packaging (rpm/ALT, man page) | ⏸ deferred |
-| M8 | Optional hardening (soak and crash tests) | ⬜ optional |
+| M8 | Optional hardening (soak and crash tests) | ✅ done |
 
 ## Done
 
@@ -111,7 +111,7 @@ hardware/session checks remain.
 
 ### P3 — M8 hardening (optional)
 
-- [ ] Long-running soak and crash tests across machines.
+- [x] Long-running soak and crash tests across machines (`WALKY_SOAK=1 go test ./internal/engine -run TestSoak`).
 
 ### Deferred
 
