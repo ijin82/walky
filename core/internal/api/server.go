@@ -43,12 +43,18 @@ type Service struct {
 // New connects to the session bus, claims the well-known name and exports the
 // object. It fails when another instance already owns the name.
 func New(d *daemon.Daemon, log *slog.Logger) (*Service, error) {
-	if log == nil {
-		log = slog.Default()
-	}
 	conn, err := dbus.SessionBus()
 	if err != nil {
 		return nil, fmt.Errorf("session bus: %w", err)
+	}
+	return NewWithConn(conn, d, log)
+}
+
+// NewWithConn claims the well-known name and exports the object on an existing
+// D-Bus connection. On failure it closes conn.
+func NewWithConn(conn *dbus.Conn, d *daemon.Daemon, log *slog.Logger) (*Service, error) {
+	if log == nil {
+		log = slog.Default()
 	}
 	reply, err := conn.RequestName(BusName, dbus.NameFlagDoNotQueue)
 	if err != nil {

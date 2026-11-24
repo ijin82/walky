@@ -99,8 +99,7 @@ hardware/session checks remain.
 - [x] CLI integration tests for `init`, `snapshot`, `verify`, `restore`, `gc`,
       `trash`, `sync --direct` and config errors. The filesystem check is a
       package seam so tests can run on temporary directories.
-- [ ] D-Bus service test over a private bus (`dbus-run-session`) — currently a
-      manual check.
+- [x] D-Bus service test over a private bus (`dbus-daemon`).
 - [x] Fuzz manifest and pack-index parsers (short runs clean).
 - [ ] Fault injection with `dm-flakey`/`dm-error` on loop devices (root-only,
       documented in `docs/MANUAL_TESTS.md`).
