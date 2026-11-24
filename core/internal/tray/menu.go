@@ -14,8 +14,9 @@ const (
 	idPause  = 3
 	idOpen   = 4
 	idVerify = 5
-	idSep    = 6
-	idQuit   = 7
+	idEject  = 6
+	idSep    = 7
+	idQuit   = 8
 )
 
 type layoutItem struct {
@@ -86,6 +87,7 @@ func (m *menu) layout(parentID int32, depth int32) (layoutItem, bool) {
 		{ID: idPause, Props: actionProps(pauseLabel)},
 		{ID: idOpen, Props: actionProps("Open Walky")},
 		{ID: idVerify, Props: actionProps("Verify integrity")},
+		{ID: idEject, Props: enabledProps("Eject drive", snap.Device != "")},
 		{ID: idSep, Props: map[string]dbus.Variant{"type": dbus.MakeVariant("separator")}},
 		{ID: idQuit, Props: actionProps("Quit Walky")},
 	}
@@ -106,6 +108,14 @@ func actionProps(label string) map[string]dbus.Variant {
 	return map[string]dbus.Variant{
 		"label":   dbus.MakeVariant(label),
 		"enabled": dbus.MakeVariant(true),
+		"visible": dbus.MakeVariant(true),
+	}
+}
+
+func enabledProps(label string, enabled bool) map[string]dbus.Variant {
+	return map[string]dbus.Variant{
+		"label":   dbus.MakeVariant(label),
+		"enabled": dbus.MakeVariant(enabled),
 		"visible": dbus.MakeVariant(true),
 	}
 }
@@ -174,6 +184,10 @@ func (m *menu) Event(id int32, eventID string, data dbus.Variant, timestamp uint
 	case idVerify:
 		if m.actions.Verify != nil {
 			m.actions.Verify()
+		}
+	case idEject:
+		if m.actions.Eject != nil {
+			m.actions.Eject()
 		}
 	case idQuit:
 		if m.actions.Quit != nil {

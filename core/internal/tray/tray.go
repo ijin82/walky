@@ -39,6 +39,7 @@ type Actions struct {
 	TogglePause func() bool
 	OpenUI      func() error
 	Verify      func()
+	Eject       func()
 	Quit        func()
 }
 

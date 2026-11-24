@@ -437,6 +437,15 @@ func (d *Daemon) startTray(ctx context.Context) {
 			return !st.Paused
 		},
 		OpenUI: tray.OpenUI,
+		Eject: func() {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if err := d.Eject(ctx); err != nil {
+					d.log.Warn("tray eject failed", "err", err)
+				}
+			}()
+		},
 		Verify: func() {
 			go func() {
 				if _, err := d.Verify(false); err != nil {

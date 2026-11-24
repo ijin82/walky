@@ -24,12 +24,13 @@ func label(item layoutItem) string {
 
 func TestMenuLayoutAndEvents(t *testing.T) {
 	paused := false
-	var synced, quit bool
+	var synced, quit, ejected bool
 	actions := Actions{
 		Snapshot: func() Snapshot {
 			return Snapshot{State: "idle", Device: "WALKY", Generation: 3, Paused: paused}
 		},
 		SyncNow: func() { synced = true },
+		Eject:   func() { ejected = true },
 		Quit:    func() { quit = true },
 		TogglePause: func() bool {
 			paused = !paused
@@ -51,6 +52,10 @@ func TestMenuLayoutAndEvents(t *testing.T) {
 	if enabled := itemByID(t, root, idStatus).Props["enabled"].Value().(bool); enabled {
 		t.Fatal("status item must be disabled")
 	}
+	eject := itemByID(t, root, idEject)
+	if !eject.Props["enabled"].Value().(bool) {
+		t.Fatal("eject must be enabled when a drive is attached")
+	}
 
 	if err := m.Event(idSync, "clicked", dbus.MakeVariant(""), 0); err != nil {
 		t.Fatal(err)
@@ -63,6 +68,12 @@ func TestMenuLayoutAndEvents(t *testing.T) {
 	}
 	if !quit {
 		t.Fatal("quit action was not called")
+	}
+	if err := m.Event(idEject, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if !ejected {
+		t.Fatal("eject action was not called")
 	}
 
 	paused = true
