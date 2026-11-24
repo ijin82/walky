@@ -287,8 +287,11 @@ idle; `--dry-run` only reports.
 
 The daemon claims `io.github.ijin.Walky1` on the session bus, watches the mount
 table for a store whose `walky.json` matches the configured `repo_id`, and
-starts a sync on attach. If a filesystem labelled `WALKY` is present but not
-mounted, it asks udisks2 to mount it (disable with `auto_mount = false`). `--device <dir>` and `--repo <dir>` allow manual test
+starts a sync on attach. While the drive stays attached it re-scans the local
+folder every `[sync] poll_seconds` (30 by default, 0 disables), so new files are
+picked up without pressing Sync. This is polling, not inotify; a scan with no
+changes does not write to the drive. If a filesystem labelled `WALKY` is present
+but not mounted, it asks udisks2 to mount it (disable with `auto_mount = false`). `--device <dir>` and `--repo <dir>` allow manual test
 runs. Without a running daemon, `walky status` falls back to local information.
 
 `make install-local` also installs a user unit with `%h/.local/bin/walky`;

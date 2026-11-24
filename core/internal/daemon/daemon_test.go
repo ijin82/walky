@@ -597,3 +597,34 @@ func TestRecoveryMergesWithoutDeleting(t *testing.T) {
 		t.Fatal("recovery did not upload keep.txt")
 	}
 }
+
+func TestPollTriggersAutoSync(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 4), gen: 1}
+	w := &fakeWatcher{events: make(chan device.Event, 4)}
+	d := &Daemon{
+		cfg: Config{
+			RepoPath: t.TempDir(), AutoSync: true, PollInterval: 40 * time.Millisecond,
+			Machine: "test", NoTray: true,
+		},
+		watcher: w, runner: runner,
+		ejector: ejectorFunc(func(context.Context, string) error { return nil }),
+		log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		state:   StateNoDevice,
+		checkFS: func(string) error { return nil },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { _ = d.Run(ctx); close(done) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("daemon did not stop")
+		}
+	})
+
+	w.events <- device.Event{Kind: device.Attached, Device: testDevice(t)}
+	waitFor(t, "attach sync", func() bool { return runner.callCount() >= 1 })
+	waitFor(t, "poll sync", func() bool { return runner.callCount() >= 2 })
+}

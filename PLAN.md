@@ -224,6 +224,7 @@ every change and all of them before a release.
 - [ ] MT-34 attach/detach loop: no stuck lock, duplicate sync or leak
 - [ ] MT-35 lost drive recovery: rebuild from A, recover B's unsynced work
       through the preview (no deletions)
+- [ ] MT-36 local changes picked up automatically within `poll_seconds`
 
 ## Open questions
 

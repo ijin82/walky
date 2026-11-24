@@ -60,6 +60,7 @@ type Sync struct {
 	Conflict      ConflictPolicy `toml:"conflict"`
 	DebounceMS    int            `toml:"debounce_ms"`
 	FullScanMin   int            `toml:"full_scan_min"`
+	PollSeconds   int            `toml:"poll_seconds"`
 	Workers       int            `toml:"workers"`
 	MaxFileSize   string         `toml:"max_file_size"`
 	SyncOnBattery bool           `toml:"sync_on_battery"`
@@ -113,6 +114,7 @@ func Default() Config {
 			Conflict:    ConflictCopy,
 			DebounceMS:  3000,
 			FullScanMin: 10,
+			PollSeconds: 30,
 			Workers:     0, // auto
 			MaxFileSize: "8G",
 		},
@@ -181,7 +183,7 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.Device.Label) == "" {
 		return errors.New("device.label must not be empty")
 	}
-	if c.Sync.DebounceMS < 0 || c.Sync.FullScanMin < 0 {
+	if c.Sync.DebounceMS < 0 || c.Sync.FullScanMin < 0 || c.Sync.PollSeconds < 0 {
 		return errors.New("sync.debounce_ms and sync.full_scan_min must be >= 0")
 	}
 	if c.Sync.Workers < 0 {

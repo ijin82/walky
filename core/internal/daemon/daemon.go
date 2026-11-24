@@ -101,6 +101,7 @@ type Config struct {
 	DeviceLabel   string
 	AutoGC        bool
 	GCInterval    time.Duration
+	PollInterval  time.Duration
 	NoTray        bool
 }
 
@@ -381,6 +382,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}()
 
+	var pollCh <-chan time.Time
+	if d.cfg.PollInterval > 0 {
+		ticker := time.NewTicker(d.cfg.PollInterval)
+		defer ticker.Stop()
+		pollCh = ticker.C
+	}
+
 	var sleepCh <-chan bool
 	if d.sleepWatch != nil {
 		var err error
@@ -402,6 +410,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 			case device.Detached:
 				d.detach(ev.Device)
 			}
+		case <-pollCh:
+			d.tryAutoSync()
 		case sleeping, ok := <-sleepCh:
 			if !ok {
 				sleepCh = nil

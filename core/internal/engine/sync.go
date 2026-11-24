@@ -208,10 +208,22 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 			return Result{}, err
 		}
 	}
-	if err := saveBase(opt.BasePath, commit.Gen, result, opt.Machine, opt.StoreRepoID); err != nil {
-		return Result{}, err
+	// A polling sync with no changes must not rewrite local state or the drive.
+	needBase := commit.Changed
+	if opt.BasePath != "" {
+		if _, err := os.Stat(opt.BasePath); err != nil {
+			needBase = true
+		}
+		if loadBaseRepoID(opt.BasePath) != opt.StoreRepoID {
+			needBase = true
+		}
 	}
-	if opt.Machine != "" {
+	if needBase {
+		if err := saveBase(opt.BasePath, commit.Gen, result, opt.Machine, opt.StoreRepoID); err != nil {
+			return Result{}, err
+		}
+	}
+	if opt.Machine != "" && (commit.Changed || needBase) {
 		if err := st.SaveMachine(store.Machine{
 			ID: opt.Machine, Hostname: host, BaseGen: commit.Gen, LastSync: time.Now().UTC(),
 		}); err != nil {

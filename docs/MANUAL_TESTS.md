@@ -217,6 +217,17 @@ Expected: the daemon is active without opening the UI; the tray icon appears;
 Expected: tray Quit stops the daemon **and** closes the window. Window Quit
 closes only the window; the daemon and tray stay alive.
 
+### MT-36 Automatic pickup of local changes
+
+1. Attach the drive and wait until the window shows `idle`.
+2. Create a folder with a subfolder and a file, or edit an existing file.
+3. Do not press Sync; wait for `poll_seconds` (set it to 5 in `config.toml` for
+   the test, then restore 30).
+
+Expected: a sync starts on its own within the interval, the file appears in the
+history, and the recent-files list shows it. A poll with no changes must not
+advance the generation or rewrite the store.
+
 ## Two-way sync
 
 ### MT-23 Conflict between two machines
