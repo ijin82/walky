@@ -14,12 +14,13 @@ This document records decisions, pitfalls and the work plan. Version 0.1
 We build:
 
 - a **daemon** (`walky daemon`) running in a systemd user session that notices
-  the drive, mounts it (through udisks2), synchronizes the folder and tracks
-  changes with inotify plus a periodic scan;
+  the drive, mounts it (through udisks2), synchronizes the folder and polls for
+  local changes while attached;
 - a **store on the drive**: content-addressed objects plus snapshots (version
   history), resistant to unplugging and able to restore onto a clean machine;
-- a **CLI** (`walky init|attach|status|sync|verify|gc|restore|export`);
-- a **GUI** in GTK4/libadwaita: status, progress, last 5 files, eject.
+- a **CLI** (`walky init|snapshot|ls|head|status|sync|verify|gc|trash|restore|eject`);
+- a **GUI** in GTK4/libadwaita: status, progress, last 5 files, settings, setup
+  wizard, recovery and eject.
 
 It is not:
 
@@ -44,7 +45,7 @@ disk. The local disk can be lost; a new machine must restore from the drive.
 | Core language | **Go** (single static binary, godbus, modernc/sqlite, blake3, zstd) | already using Go; the UI is thin |
 | UI language | **Vala + GTK4/libadwaita** (separate process, D-Bus) | minimal code for a native GNOME look; a UI crash does not break sync |
 | Alternative | everything in Rust (gtk4-rs + zbus) | if one language matters more than effort |
-| GNOME integration | window + Background portal + GNotification; optional SNI tray | `appindicatorsupport` is installed, but the portal is the native path |
+| GNOME integration | window + daemon-owned SNI tray + GNotification | `appindicatorsupport` is installed; daemon owns the tray so it survives UI restarts |
 | Unit of history | generation + manifest, HEAD written last | atomic commits without filesystem transactions |
 
 ### 2.1 Accepted (2026-11-24)
@@ -316,7 +317,8 @@ the drive, `B` — this machine's base. For every path:
 
 Phase order:
 
-1. Rescan the local folder (inotify events plus a full scan on a timer).
+1. Rescan the local folder (triggered on attach, on demand, or by the periodic
+   `poll_seconds` timer).
 2. Validate the drive: marker, `repo_id`, format version, fsck flag, free space.
 3. Compute the plan (push/pull/conflict) and its size.
 4. **Pull phase**: download missing objects, apply them atomically (tmp in the
@@ -464,8 +466,9 @@ validated inside the daemon (labels can be forged).
 
 Implementation note (M6): the window polls `GetStatus` and `GetEvents` once per
 second instead of subscribing to signals, which keeps the Vala client small and
-avoids missed-event state. Settings, the Background portal and the tray icon are
-still to be added.
+avoids missed-event state. Settings, the setup wizard, recovery preview and the
+daemon-owned StatusNotifierItem tray icon are implemented; the Background portal
+is not used.
 
 ### 6.1 Window (GTK4 + libadwaita 1.8)
 
@@ -485,44 +488,23 @@ still to be added.
 
 ### 6.2 "Visible as running"
 
-Two independent mechanisms; ideally both:
-
-1. **Background portal** (`org.freedesktop.portal.Background.RequestBackground`,
-   `reason`, autostart) → GNOME 45+ lists the app in Quick Settings
-   ("Background Apps") where it can be terminated. This is the native path.
-2. **StatusNotifierItem** (tray) — this machine already has
-   `appindicatorsupport@rgcjonas.gmail.com`, so an icon with a menu (status,
-   recent files, "Sync", "Show window") will be visible. It can be implemented
-   directly in Go through `org.kde.StatusNotifierItem` +
-   `com.canonical.dbusmenu`, without GTK3 dependencies.
-
-Plus a `.desktop` file with `X-GNOME-UsesNotifications=true`,
-`DBusActivatable=true`, an icon and `Keywords`.
+- **StatusNotifierItem** (tray) — owned by `walky daemon` directly in Go through
+  `org.kde.StatusNotifierItem` + `com.canonical.dbusmenu` (no GTK3
+  dependencies). Uses `walky-symbolic` so GNOME recolors it for light/dark
+  panels, stays visible when the window is closed and survives UI restarts.
+- `Gio.Notification` on sync completion and errors, plus a `.desktop` file with
+  `X-GNOME-UsesNotifications=true`, `DBusActivatable=true`, an icon and
+  `Keywords`.
 
 ### 6.3 D-Bus contract
 
-```xml
-<node>
-  <interface name="io.github.ijin.Walky1">
-    <method name="SyncNow"><arg type="b" direction="in" name="wait"/></method>
-    <method name="Pause"><arg type="b" direction="in" name="paused"/></method>
-    <method name="GetStatus"><arg type="a{sv}" direction="out" name="status"/></method>
-    <method name="GetEvents"><arg type="u" direction="in" name="limit"/>
-      <arg type="a(ssstt)" direction="out" name="events"/></method>
-    <method name="Eject"/>
-    <method name="Verify"><arg type="b" direction="in" name="full"/></method>
-    <signal name="StateChanged"><arg type="s" name="state"/></signal>
-    <signal name="Progress"><arg type="u" name="done"/><arg type="u" name="total"/>
-      <arg type="t" name="bytes"/></signal>
-    <signal name="FileDone"><arg type="s" name="path"/><arg type="s" name="op"/>
-      <arg type="s" name="result"/></signal>
-  </interface>
-</node>
-```
-
-`GetStatus` returns `state`, `device`, `last_sync`, `pending`, `conflicts`,
-`free_bytes`, `version`. Throttle signals (≤10/s). The UI never blocks: all calls
-are asynchronous and progress arrives through signals.
+The authoritative D-Bus interface definition lives in
+[core/internal/api/walky1.xml](../core/internal/api/walky1.xml) and is exported
+live via `org.freedesktop.DBus.Introspectable`. It exposes sync/lifecycle
+methods (`SyncNow`, `Pause`, `GetStatus`, `GetEvents`, `Eject`, `Verify`),
+setup/recovery (`GetDrives`, `InitStore`, `UseStore`, `PreviewRecovery`,
+`StartRecovery`), settings (`GetSettings`, `SetSettings`, `ReloadConfig`) and
+signals (`StateChanged`, `Progress`, `FileDone`).
 
 ---
 
