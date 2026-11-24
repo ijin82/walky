@@ -22,9 +22,11 @@ namespace Walky {
         private RecoveryWindow? recovery_window;
         private Gtk.Button recovery_button;
         private Adw.ToastOverlay toast_overlay;
+        private Adw.Toast? active_toast = null;
         private string last_state = "";
         private int64 last_generation = -1;
         private bool manual_sync_pending = false;
+        private bool manual_sync_done = false;
         private int64 manual_sync_gen = -1;
 
         public Window (Gtk.Application app, Api api) {
@@ -301,21 +303,32 @@ namespace Walky {
             toast_overlay.add_toast(new Adw.Toast("Sync folder changed"));
         }
 
+        private void show_toast (string text) {
+            if (active_toast != null) {
+                active_toast.dismiss();
+            }
+            active_toast = new Adw.Toast(text);
+            active_toast.timeout = 3;
+            toast_overlay.add_toast(active_toast);
+        }
+
         private void trigger_sync () {
             manual_sync_pending = true;
+            manual_sync_done = false;
             manual_sync_gen = last_generation;
             title_widget.subtitle = "Checking for changes…";
-            toast_overlay.add_toast(new Adw.Toast("Checking for changes…"));
+            show_toast("Checking for changes…");
             api.sync_now();
         }
 
         private void on_sync_finished () {
-            // Final message is shown once the refreshed status arrives in on_status.
+            manual_sync_done = true;
         }
 
         private void on_sync_failed (string message) {
             manual_sync_pending = false;
-            toast_overlay.add_toast(new Adw.Toast("Sync failed: " + message));
+            manual_sync_done = false;
+            show_toast("Sync failed: " + message);
         }
 
         private void on_repo_path_failed (string message) {
@@ -396,14 +409,15 @@ namespace Walky {
             } else if (state == "error" && last_state != "error") {
                 send_notification("Sync failed", error);
             }
-            if (manual_sync_pending && state != "syncing") {
+            if (manual_sync_pending && manual_sync_done && state != "syncing") {
                 manual_sync_pending = false;
+                manual_sync_done = false;
                 if (state == "error") {
-                    toast_overlay.add_toast(new Adw.Toast("Sync failed: " + error));
+                    show_toast("Sync failed: " + error);
                 } else if (generation == manual_sync_gen) {
-                    toast_overlay.add_toast(new Adw.Toast("Already up to date — nothing to sync"));
+                    show_toast("Already up to date — nothing to sync");
                 } else {
-                    toast_overlay.add_toast(new Adw.Toast("Synced (generation %s)".printf(generation.to_string())));
+                    show_toast("Synced (generation %s)".printf(generation.to_string()));
                 }
             }
             last_state = state;
