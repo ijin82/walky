@@ -6,16 +6,34 @@
 
 Состояние: **M0 (каркас)**. Архитектура и план — [docs/DESIGN.md](docs/DESIGN.md).
 
+## Структура
+
+```
+core/              Go-модуль "walky": демон, CLI, движок синхронизации
+  cmd/walky/       точка входа и подкоманды
+  internal/        config, version, api (D-Bus), далее store/scan/sync/device/index
+ui/                Vala + GTK4/libadwaita: отдельный процесс, общается по D-Bus
+  src/             Application.vala, Window.vala, main.vala
+data/              systemd-юнит, udev, sysctl, пример конфига
+docs/              DESIGN.md — архитектура, подводные камни, план
+```
+
+Соглашение: **весь код, идентификаторы и комментарии — на английском**; документация
+и общение — на русском. Go и Vala не смешиваются в одном каталоге и собираются
+независимо (`core/` — `go build`, `ui/` — `valac`).
+
 ## Сборка
 
 ```sh
-make build          # bin/walky
-make test vet
+make check          # gofmt + go vet + go test + сборка обоих бинарников
+make build          # bin/walky, bin/walky-ui
+make run-ui         # запустить окно
 ./bin/walky version
 ./bin/walky status --json
 ```
 
-Нужен Go ≥ 1.24 (используется `log/slog`, `os.Root` — со стадии M1).
+Нужны Go ≥ 1.24 (используются `log/slog`, далее `os.Root`) и Vala с vapi для
+GTK4/libadwaita. Meson не требуется: UI собирается коротким `ui/Makefile`.
 
 ## Установка (после M3)
 
@@ -28,18 +46,7 @@ systemctl --user enable --now walky.service
 `walky.service` — user-юнит с D-Bus-активацией; системный udev-режим — в
 `data/99-walky-usb.rules` (закомментирован).
 
-## Раскладка
-
-```
-cmd/walky/         CLI и демон
-internal/config/   конфиг (TOML) + валидация
-internal/version/  версия сборки
-internal/api/      D-Bus-интерфейс (XML)
-data/              systemd, udev, sysctl
-docs/DESIGN.md     архитектура, подводные камни, план
-```
-
 ## Безопасность данных
 
 Флешка — не бэкап. Пока не сделана вторая реплика, любая потеря носителя = потеря
-данных. Шифрование (LUKS2) планируется в M8; целевая ФС — ext4.
+данных. Целевая ФС — ext4 + LUKS2 (шифрование — стадия M8).

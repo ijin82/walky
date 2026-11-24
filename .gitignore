@@ -1,4 +1,5 @@
 /bin/
 /dist/
+/ui/build/
 *.test
 *.out

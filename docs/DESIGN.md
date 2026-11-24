@@ -491,17 +491,25 @@ Vala-монолит не советую: движок синка на Vala бу�
 Структура репозитория:
 
 ```
-cmd/walky/            # main, CLI, daemon
-internal/store/       # CAS, паки, манифесты, коммит, GC
-internal/scan/        # обход, stat-кэш, хеширование, exclude
-internal/sync/        # 3-way merge, apply, конфликты
-internal/device/      # udisks2, монтирование, извлечение
-internal/index/       # SQLite
-internal/api/         # D-Bus-сервер + SNI
-ui/                   # Vala, meson
+core/                 # Go-модуль "walky", собирается независимо
+  cmd/walky/          # main, CLI, daemon
+  internal/store/     # CAS, паки, манифесты, коммит, GC
+  internal/scan/      # обход, stat-кэш, хеширование, exclude
+  internal/sync/      # 3-way merge, apply, конфликты
+  internal/device/    # udisks2, монтирование, извлечение
+  internal/index/     # SQLite
+  internal/api/       # D-Bus-сервер + SNI
+  internal/config/    # конфиг, валидация
+ui/                   # Vala + GTK4/libadwaita, отдельный процесс, D-Bus
+  src/                # Application.vala, Window.vala
+  Makefile            # valac, без meson
 data/                 # systemd units, .desktop, иконки, udev, sysctl
 docs/
 ```
+
+Границы: `core/` не знает про GTK, `ui/` не знает про формат хранилища — только
+D-Bus-контракт `internal/api/walky1.xml`. Это позволяет тестировать движок без
+дисплея и менять UI, не трогая синхронизацию.
 
 ---
 
