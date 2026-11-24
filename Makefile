@@ -78,7 +78,7 @@ define install_icons
 	@if command -v magick >/dev/null 2>&1; then \
 		for s in $(ICON_SIZES); do \
 			mkdir -p $(1)/$${s}x$${s}/apps; \
-			magick $(ICON_SRC) -background none -resize $${s}x$${s} $(1)/$${s}x$${s}/apps/walky.png; \
+			magick -background none $(ICON_SRC) -resize $${s}x$${s} $(1)/$${s}x$${s}/apps/walky.png; \
 			cp $(1)/$${s}x$${s}/apps/walky.png $(1)/$${s}x$${s}/apps/$(APP_ID).png; \
 		done; \
 	fi

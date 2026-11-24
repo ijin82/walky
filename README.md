@@ -1,5 +1,7 @@
 # Walky — an offline "cloud" on a USB drive
 
+![Aster](data/walky.svg)
+
 Two-way synchronization of a folder with a USB flash drive that acts as the
 remote server of Dropbox/Yandex Disk: version history, deduplication, conflict
 handling and restore onto a new machine. No internet is required — the transport
