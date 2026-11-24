@@ -12,6 +12,7 @@ namespace Walky {
         private Adw.SpinRow trash_row;
         private Adw.ComboRow conflict_row;
         private Adw.SpinRow poll_row;
+        private Adw.ActionRow version_row;
 
         public SettingsWindow (Gtk.Application app, Api api) {
             Object (
@@ -86,6 +87,14 @@ namespace Walky {
             save.clicked.connect(save_settings);
             actions.add(save);
             page.add(actions);
+
+            var about_group = new Adw.PreferencesGroup();
+            about_group.title = "About";
+            version_row = new Adw.ActionRow();
+            version_row.title = "Version";
+            version_row.subtitle = "—";
+            about_group.add(version_row);
+            page.add(about_group);
         }
 
         private void on_settings (GLib.Variant dict) {
@@ -107,6 +116,8 @@ namespace Walky {
             var conflict = string_value(dict, "conflict");
             conflict_row.selected = conflict_index(conflict);
             poll_row.value = int_value(dict, "poll_seconds");
+            var ver = string_value(dict, "version");
+            version_row.subtitle = ver != "" ? ver : "—";
         }
 
         private void save_settings () {

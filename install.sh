@@ -13,13 +13,62 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-if ! command -v make >/dev/null 2>&1; then
-    echo "error: make is required" >&2
-    exit 1
-fi
+APP_ID="io.github.ijin.Walky"
 
 info() { echo "==> $*"; }
 warn() { echo "!!! $*" >&2; }
+
+install_prebuilt_local() {
+    local prefix="${HOME}/.local"
+    local icon_dir="${prefix}/share/icons/hicolor"
+    local unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+    install -Dm755 bin/walky "${prefix}/bin/walky"
+    install -Dm755 bin/walky-ui "${prefix}/bin/walky-ui"
+    install -Dm644 "data/${APP_ID}.desktop" "${prefix}/share/applications/${APP_ID}.desktop"
+    rm -f "${prefix}/share/applications/walky.desktop"
+    install -Dm644 data/walky.svg "${icon_dir}/scalable/apps/walky.svg"
+    install -Dm644 data/walky.svg "${icon_dir}/scalable/apps/${APP_ID}.svg"
+    install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/walky-symbolic.svg"
+    install -Dm644 data/walky-paused-symbolic.svg "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg"
+    install -Dm644 data/walky.service "${unit_dir}/walky.service"
+    sed -i 's|/usr/bin/walky|%h/.local/bin/walky|' "${unit_dir}/walky.service"
+}
+
+uninstall_prebuilt_local() {
+    local prefix="${HOME}/.local"
+    local icon_dir="${prefix}/share/icons/hicolor"
+    local unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+    rm -f "${prefix}/bin/walky" "${prefix}/bin/walky-ui"
+    rm -f "${prefix}/share/applications/${APP_ID}.desktop" "${prefix}/share/applications/walky.desktop"
+    rm -f "${icon_dir}/scalable/apps/walky.svg" "${icon_dir}/scalable/apps/${APP_ID}.svg"
+    rm -f "${icon_dir}/scalable/apps/walky-symbolic.svg" "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg" "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    rm -f "${unit_dir}/walky.service"
+}
+
+install_prebuilt_system() {
+    local prefix="/usr"
+    local icon_dir="${prefix}/share/icons/hicolor"
+    install -Dm755 bin/walky "${prefix}/bin/walky"
+    install -Dm755 bin/walky-ui "${prefix}/bin/walky-ui"
+    install -Dm644 "data/${APP_ID}.desktop" "${prefix}/share/applications/${APP_ID}.desktop"
+    install -Dm644 data/walky.svg "${icon_dir}/scalable/apps/walky.svg"
+    install -Dm644 data/walky.svg "${icon_dir}/scalable/apps/${APP_ID}.svg"
+    install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/walky-symbolic.svg"
+    install -Dm644 data/walky-paused-symbolic.svg "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    install -Dm644 data/walky-symbolic.svg "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg"
+    install -Dm644 data/walky.service "${prefix}/lib/systemd/user/walky.service"
+}
+
+uninstall_prebuilt_system() {
+    local prefix="/usr"
+    local icon_dir="${prefix}/share/icons/hicolor"
+    rm -f "${prefix}/bin/walky" "${prefix}/bin/walky-ui"
+    rm -f "${prefix}/share/applications/${APP_ID}.desktop" "${prefix}/share/applications/walky.desktop"
+    rm -f "${icon_dir}/scalable/apps/walky.svg" "${icon_dir}/scalable/apps/${APP_ID}.svg"
+    rm -f "${icon_dir}/scalable/apps/walky-symbolic.svg" "${icon_dir}/scalable/apps/${APP_ID}-symbolic.svg" "${icon_dir}/scalable/apps/walky-paused-symbolic.svg"
+    rm -f "${prefix}/lib/systemd/user/walky.service"
+}
 
 USER_UNIT="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/walky.service"
 SYSTEM_UNIT="/usr/lib/systemd/user/walky.service"
@@ -227,7 +276,11 @@ USAGE
 
 install_local() {
     info "installing for ${USER} into ~/.local"
-    make install-local
+    if [ -f Makefile ]; then
+        make install-local
+    else
+        install_prebuilt_local
+    fi
     if systemd_available; then
         systemctl --user daemon-reload
         if [ "$(service_active)" = "active" ]; then
@@ -249,7 +302,11 @@ install_system() {
         exit 1
     fi
     info "installing system-wide under /usr"
-    make install install-data
+    if [ -f Makefile ]; then
+        make install install-data
+    else
+        install_prebuilt_system
+    fi
     echo
     echo "Done."
     echo "  The unit is in ${SYSTEM_UNIT}."
@@ -261,7 +318,11 @@ install_system() {
 uninstall_local() {
     info "removing the current-user installation"
     disable_service
-    make uninstall-local
+    if [ -f Makefile ]; then
+        make uninstall-local
+    else
+        uninstall_prebuilt_local
+    fi
     echo "Done."
 }
 
@@ -272,7 +333,11 @@ uninstall_system() {
         exit 1
     fi
     info "removing the system installation"
-    make uninstall
+    if [ -f Makefile ]; then
+        make uninstall
+    else
+        uninstall_prebuilt_system
+    fi
     echo "Done."
 }
 

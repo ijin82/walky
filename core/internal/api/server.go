@@ -13,6 +13,7 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 
 	"walky/internal/daemon"
+	"walky/internal/version"
 )
 
 //go:embed walky1.xml
@@ -174,6 +175,7 @@ func (s *Service) GetSettings() (map[string]dbus.Variant, *dbus.Error) {
 		"machine_days": dbus.MakeVariant(int32(st.Retention.MachineDays)),
 		"conflict":     dbus.MakeVariant(st.Conflict),
 		"poll_seconds": dbus.MakeVariant(int32(st.PollSeconds)),
+		"version":      dbus.MakeVariant(version.Version),
 	}, nil
 }
 
