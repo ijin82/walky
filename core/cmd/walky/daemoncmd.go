@@ -71,6 +71,7 @@ func cmdDaemon(args []string) error {
 		IndexPath:     idxPath,
 		Machine:       machine,
 		AutoSync:      cfg.Device.AutoSync,
+		AutoMount:     cfg.Device.AutoMount,
 		StoreOverride: *deviceRoot,
 		Interval:      *interval,
 		Mode:          string(cfg.Sync.Mode),

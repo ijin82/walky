@@ -392,9 +392,10 @@ device.
   the mount root), and validates `repo_id` against the config. This needs no
   root and no polkit, and works the same whether udisks or the user mounted the
   drive.
-- udisks2 is still used for `Filesystem.Unmount` and `Drive.PowerOff` on eject,
-  and could later mount drives the desktop did not automount. Mounting normally
-  happens in GNOME; use `noatime`.
+- udisks2 is still used for `Filesystem.Unmount` and `Drive.PowerOff` on eject.
+- If a filesystem labelled `WALKY` exists but is not mounted, the daemon asks
+  udisks2 to mount it (`auto_mount`, checked every 5 s, option `noatime`).
+  LUKS unlocking is left to the desktop; Walky only waits for the ext4 mount.
 - Pros: no root, works inside the session, can show UI, can unmount cleanly.
 - Con: does not work without a login (for headless, see §5.2).
 

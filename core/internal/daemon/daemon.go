@@ -54,6 +54,17 @@ type Ejector interface {
 	Eject(ctx context.Context, mountPoint string) error
 }
 
+// Mounter mounts labelled filesystems that are not mounted yet.
+type Mounter interface {
+	MountLabeled(ctx context.Context, label string) (int, error)
+}
+
+type mounterFunc func(context.Context, string) (int, error)
+
+func (f mounterFunc) MountLabeled(ctx context.Context, label string) (int, error) {
+	return f(ctx, label)
+}
+
 // Emitter receives state changes for the D-Bus service.
 type Emitter interface {
 	StateChanged(state string)
@@ -79,6 +90,8 @@ type Config struct {
 	TrashDir      string
 	ConfigPath    string
 	Retention     RetentionSettings
+	AutoMount     bool
+	DeviceLabel   string
 }
 
 // RetentionSettings mirrors the [retention] section for the UI.
@@ -140,6 +153,8 @@ type Daemon struct {
 
 	sleepWatch func(context.Context) (<-chan bool, error)
 	checkFS    func(string) error
+	mounter    Mounter
+	mounting   bool
 
 	mu       sync.Mutex
 	emitter  Emitter
@@ -165,6 +180,9 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 	if cfg.Interval <= 0 {
 		cfg.Interval = 2 * time.Second
 	}
+	if cfg.DeviceLabel == "" {
+		cfg.DeviceLabel = device.DefaultLabel
+	}
 	return &Daemon{
 		cfg:        cfg,
 		watcher:    device.NewWatcher(cfg.Interval),
@@ -173,6 +191,7 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 		log:        log,
 		sleepWatch: device.WatchSleep,
 		checkFS:    store.CheckFilesystem,
+		mounter:    mounterFunc(device.MountLabeled),
 		state:      StateNoDevice,
 		settings: Settings{
 			Excludes:  append([]string(nil), cfg.Excludes...),
@@ -306,6 +325,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return nil
 	}
 
+	go d.automountLoop(ctx)
+
 	events := make(chan device.Event, 8)
 	go func() {
 		if err := d.watcher.Run(ctx, events); err != nil && ctx.Err() == nil {
@@ -347,6 +368,49 @@ func (d *Daemon) Run(ctx context.Context) error {
 				d.tryAutoSync()
 			}
 		}
+	}
+}
+
+func (d *Daemon) automountLoop(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	d.tryAutomount(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			d.tryAutomount(ctx)
+		}
+	}
+}
+
+func (d *Daemon) tryAutomount(ctx context.Context) {
+	d.mu.Lock()
+	ready := d.cfg.AutoMount && d.cfg.StoreOverride == "" && !d.mounting && d.mounter != nil
+	label := d.cfg.DeviceLabel
+	if ready {
+		d.mounting = true
+	}
+	d.mu.Unlock()
+	if !ready {
+		return
+	}
+	defer func() {
+		d.mu.Lock()
+		d.mounting = false
+		d.mu.Unlock()
+	}()
+
+	mountCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	n, err := d.mounter.MountLabeled(mountCtx, label)
+	if err != nil {
+		d.log.Debug("automount failed", "err", err)
+		return
+	}
+	if n > 0 {
+		d.log.Info("mounted candidate drives", "count", n)
 	}
 }
 

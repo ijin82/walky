@@ -43,6 +43,7 @@ func cmdInit(args []string) error {
 	fmt.Printf("repo_id: %s\n", m.RepoID)
 	fmt.Printf("format:  %d\n", m.Format)
 	fmt.Printf("\nPin the drive identity in ~/.config/walky/config.toml:\n\n[repo]\npath = \"~/Sync\"\nrepo_id = %q\n", m.RepoID)
+	fmt.Println("\nTip: label the filesystem WALKY (e2label /dev/sdX WALKY) so the daemon can automount it.")
 	return nil
 }
 

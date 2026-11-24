@@ -340,3 +340,37 @@ func TestFilesystemRejected(t *testing.T) {
 		t.Fatal("unsupported store was accepted")
 	}
 }
+
+type fakeMounter struct {
+	mu    sync.Mutex
+	calls int
+	label string
+}
+
+func (m *fakeMounter) MountLabeled(ctx context.Context, label string) (int, error) {
+	m.mu.Lock()
+	m.calls++
+	m.label = label
+	m.mu.Unlock()
+	return 1, nil
+}
+
+func TestAutomountCallsMounter(t *testing.T) {
+	d := New(Config{
+		RepoPath:    t.TempDir(),
+		AutoMount:   true,
+		DeviceLabel: "WALKY",
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	m := &fakeMounter{}
+	d.mounter = m
+	d.tryAutomount(context.Background())
+	if m.calls != 1 || m.label != "WALKY" {
+		t.Fatalf("mounter calls = %d, label = %q", m.calls, m.label)
+	}
+
+	d.cfg.AutoMount = false
+	d.tryAutomount(context.Background())
+	if m.calls != 1 {
+		t.Fatalf("mounter called with automount disabled")
+	}
+}

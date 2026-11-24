@@ -67,6 +67,17 @@ filesystem, reformat it to ext4 yourself (`mkfs.ext4 -L WALKY /dev/sdX`) and
 mount it again. A convenience helper for blank drives may arrive later, but it
 is optional and never automatic.
 
+For automatic mounting, label the filesystem `WALKY`:
+
+```sh
+e2label /dev/sdX WALKY
+```
+
+GNOME normally mounts removable drives itself. If nothing mounts the drive, the
+daemon asks udisks2 to mount any unmounted filesystem labelled `WALKY`
+(`auto_mount = true`, on by default). LUKS is not unlocked by Walky: the desktop
+asks for the passphrase and the ext4 filesystem appears afterwards.
+
 ## Quick start (manual, no daemon)
 
 ```sh
@@ -168,7 +179,8 @@ it expires. Run GC while the daemon is idle; `--dry-run` only reports.
 
 The daemon claims `io.github.ijin.Walky1` on the session bus, watches the mount
 table for a store whose `walky.json` matches the configured `repo_id`, and
-starts a sync on attach. `--device <dir>` and `--repo <dir>` allow manual test
+starts a sync on attach. If a filesystem labelled `WALKY` is present but not
+mounted, it asks udisks2 to mount it (disable with `auto_mount = false`). `--device <dir>` and `--repo <dir>` allow manual test
 runs. Without a running daemon, `walky status` falls back to local information.
 
 `make install-local` also installs a user unit with `%h/.local/bin/walky`;

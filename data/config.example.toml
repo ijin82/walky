@@ -33,4 +33,5 @@ trash_days = 30
 
 [device]
 auto_sync = true
+auto_mount = true
 eject_after_sync = false

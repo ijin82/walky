@@ -29,7 +29,7 @@ Version: `0.1.0` · updated: 2026-11-24
   200k-file benchmark (2.3 s cold / 1.2 s warm).
 - **Daemon** — mount-table watcher, marker and `repo_id` validation, auto-sync,
   pause, cancellation, D-Bus API and signals, logind sleep handling, udisks2
-  eject.
+  eject and automount of unmounted filesystems labelled `WALKY`.
 - **Two-way sync** — per-machine bases, 3-way plan, deletions with local trash
   and drive trash records, conflict copies / `local-wins` / `newest`, conditional
   commits, randomized two-machine convergence tests.
@@ -64,8 +64,8 @@ Version: `0.1.0` · updated: 2026-11-24
 
 ### P1 — drive lifecycle
 
-- [ ] Mount a Walky drive through udisks2 when the desktop did not automount it
-      (polkit-aware, `noatime`), and skip/retry cleanly when it is refused.
+- [x] Mount a Walky drive through udisks2 when the desktop did not automount it
+      (labelled `WALKY`, `noatime`, polkit-aware, retried every 5 s).
 - [ ] Do not attempt LUKS unlocking from Walky: the desktop handles the
       passphrase; Walky only waits for the ext4 mount to appear.
 - [ ] Real-hardware checks MT-10…MT-14 (plug/unplug, eject, suspend, daemon
@@ -110,7 +110,8 @@ Version: `0.1.0` · updated: 2026-11-24
 ## Known limitations
 
 - Linux only; ext4 only. Windows/macOS cannot mount the drive.
-- The daemon only uses filesystems the desktop (or the user) already mounted.
+- Automount only considers filesystems labelled `WALKY`; the desktop can still
+  mount other drives, but Walky will not do it for them.
 - The UI polls status once per second; it does not subscribe to signals yet.
 - Deletions are inferred from the base; explicit tombstone entries are not
   stored in manifests.

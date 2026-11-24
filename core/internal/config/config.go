@@ -80,6 +80,7 @@ type Retention struct {
 // Device tunes drive detection.
 type Device struct {
 	AutoSync       bool `toml:"auto_sync"`
+	AutoMount      bool `toml:"auto_mount"`
 	EjectAfterSync bool `toml:"eject_after_sync"`
 }
 
@@ -115,7 +116,7 @@ func Default() Config {
 			"**/*.tmp",
 		}},
 		Retention: Retention{Daily: 14, Weekly: 8, Monthly: 6, TrashDays: 30},
-		Device:    Device{AutoSync: true},
+		Device:    Device{AutoSync: true, AutoMount: true},
 	}
 }
 

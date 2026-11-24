@@ -97,10 +97,14 @@ Expected: increments in seconds; the first upload within the estimates in
 Automated tests cover the state machine, marker validation and cancellation.
 The checks below require a real drive and a real session bus.
 
-### MT-10 Plug detection
+### MT-10 Plug detection and automount
 
-Plug the drive with the daemon running. Expected: `walky status` shows the
-device within a second; the journal logs the attach; no root prompts.
+1. Label the filesystem `WALKY` (`e2label /dev/sdX WALKY`) and unmount it.
+2. Plug the drive with the daemon running and let udisks2 mount it, or watch
+   the daemon mount it itself (`auto_mount = true`).
+
+Expected: `walky status` shows the device within a few seconds; the journal logs
+the attach; no root terminal is needed (a polkit prompt is acceptable).
 
 ### MT-11 Autosync on attach
 
