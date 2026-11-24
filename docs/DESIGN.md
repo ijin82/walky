@@ -393,7 +393,7 @@ device.
   root and no polkit, and works the same whether udisks or the user mounted the
   drive.
 - Local changes are detected by polling: while a drive is attached the daemon
-  rescans every `sync.poll_seconds` (default 30). An empty scan commits nothing
+  rescans every `sync.poll_seconds` (default 60). An empty scan commits nothing
   and writes neither the base nor the machine record. inotify is a future
   optimisation.
 - udisks2 is still used for `Filesystem.Unmount` and `Drive.PowerOff` on eject.

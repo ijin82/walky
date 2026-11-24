@@ -114,7 +114,7 @@ func Default() Config {
 			Conflict:    ConflictCopy,
 			DebounceMS:  3000,
 			FullScanMin: 10,
-			PollSeconds: 30,
+			PollSeconds: 60,
 			Workers:     0, // auto
 			MaxFileSize: "8G",
 		},

@@ -113,3 +113,9 @@ func TestDefaultExcludesVendor(t *testing.T) {
 		t.Fatal("default excludes do not cover vendor")
 	}
 }
+
+func TestDefaultPollSeconds(t *testing.T) {
+	if got := Default().Sync.PollSeconds; got != 60 {
+		t.Fatalf("default poll_seconds = %d, want 60", got)
+	}
+}
