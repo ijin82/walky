@@ -155,3 +155,28 @@ func TestSetRepoPath(t *testing.T) {
 		t.Fatal("SetRepoPath accepted change while syncing")
 	}
 }
+
+func TestEventsPersistence(t *testing.T) {
+	eventsPath := filepath.Join(t.TempDir(), "events.json")
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d1 := New(Config{RepoPath: t.TempDir(), EventsPath: eventsPath, NoTray: true}, log)
+
+	for i := 1; i <= 60; i++ {
+		d1.recordEvent(Event{Path: filepath.Join("dir", string(rune('a'+(i%26)))), Op: "push", Result: "ok", Time: int64(i)})
+	}
+	// Summary event flushes the last 50 events to disk.
+	d1.recordEvent(Event{Path: "/store", Op: "sync", Result: "ok", Time: 61})
+
+	d2 := New(Config{RepoPath: t.TempDir(), EventsPath: eventsPath, NoTray: true}, log)
+	got := d2.Events(100)
+	if len(got) != maxPersistedEvents {
+		t.Fatalf("persisted events = %d, want %d", len(got), maxPersistedEvents)
+	}
+	// Newest first (Time 61 down to 12).
+	if got[0].Time != 61 || got[0].Op != "sync" {
+		t.Fatalf("newest event = %+v, want sync at t=61", got[0])
+	}
+	if got[len(got)-1].Time != 12 {
+		t.Fatalf("oldest persisted event = %+v, want t=12", got[len(got)-1])
+	}
+}

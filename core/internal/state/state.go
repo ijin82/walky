@@ -32,3 +32,12 @@ func IndexPath(repo string) (string, error) {
 	sum := sha256.Sum256([]byte(repo))
 	return filepath.Join(dir, "index-"+hex.EncodeToString(sum[:8])+".db"), nil
 }
+
+// EventsPath returns the path where the daemon persists recent activity.
+func EventsPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "events.json"), nil
+}

@@ -54,6 +54,10 @@ func cmdDaemon(args []string) error {
 	if err != nil {
 		return err
 	}
+	eventsPath, err := state.EventsPath()
+	if err != nil {
+		return err
+	}
 	machine, err := machineid.Get()
 	if err != nil {
 		return err
@@ -83,6 +87,7 @@ func cmdDaemon(args []string) error {
 		Conflict:      string(cfg.Sync.Conflict),
 		BasePath:      basePath,
 		TrashDir:      trashDir,
+		EventsPath:    eventsPath,
 		ConfigPath:    cfg.Path,
 		Retention: daemon.RetentionSettings{
 			Daily: cfg.Retention.Daily, Weekly: cfg.Retention.Weekly,

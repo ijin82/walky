@@ -4,6 +4,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -25,7 +26,10 @@ import (
 	"walky/internal/tray"
 )
 
-const maxEvents = 200
+const (
+	maxEvents          = 200
+	maxPersistedEvents = 50
+)
 
 // Sync states reported to clients.
 const (
@@ -96,6 +100,7 @@ type Config struct {
 	Conflict      string
 	BasePath      string
 	TrashDir      string
+	EventsPath    string
 	ConfigPath    string
 	Retention     RetentionSettings
 	AutoMount     bool
@@ -210,7 +215,7 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 	if cfg.GCInterval <= 0 {
 		cfg.GCInterval = 24 * time.Hour
 	}
-	return &Daemon{
+	d := &Daemon{
 		cfg:        cfg,
 		watcher:    device.NewWatcher(cfg.Interval),
 		runner:     runnerFunc(engine.Sync),
@@ -229,6 +234,8 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 			PollSeconds: int(cfg.PollInterval / time.Second),
 		},
 	}
+	d.loadEvents()
+	return d
 }
 
 type ejectorFunc func(context.Context, string) error
@@ -946,12 +953,62 @@ func (d *Daemon) recordEvent(e Event) {
 		d.events = d.events[len(d.events)-maxEvents:]
 	}
 	em := d.emitter
-	d.mu.Unlock()
-	switch e.Op {
-	case "push", "pull", "delete", "conflict":
-		if em != nil {
-			em.FileDone(e.Path, e.Op, e.Result)
+	eventsPath := d.cfg.EventsPath
+	var toSave []Event
+	isPerFile := e.Op == "push" || e.Op == "pull" || e.Op == "delete" || e.Op == "conflict"
+	if eventsPath != "" && !isPerFile {
+		start := 0
+		if len(d.events) > maxPersistedEvents {
+			start = len(d.events) - maxPersistedEvents
 		}
+		toSave = append([]Event(nil), d.events[start:]...)
+	}
+	d.mu.Unlock()
+
+	if len(toSave) > 0 {
+		d.saveEvents(eventsPath, toSave)
+	}
+	if isPerFile && em != nil {
+		em.FileDone(e.Path, e.Op, e.Result)
+	}
+}
+
+func (d *Daemon) loadEvents() {
+	if d.cfg.EventsPath == "" {
+		return
+	}
+	data, err := os.ReadFile(d.cfg.EventsPath)
+	if err != nil {
+		return
+	}
+	var list []Event
+	if err := json.Unmarshal(data, &list); err != nil {
+		d.log.Warn("ignore unreadable events cache", "path", d.cfg.EventsPath, "err", err)
+		return
+	}
+	if len(list) > maxPersistedEvents {
+		list = list[len(list)-maxPersistedEvents:]
+	}
+	d.events = list
+}
+
+func (d *Daemon) saveEvents(path string, events []Event) {
+	if err := state.EnsureDir(filepath.Dir(path)); err != nil {
+		d.log.Warn("create state dir for events failed", "err", err)
+		return
+	}
+	data, err := json.Marshal(events)
+	if err != nil {
+		return
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+		d.log.Warn("write events cache failed", "err", err)
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		d.log.Warn("rename events cache failed", "err", err)
 	}
 }
 
