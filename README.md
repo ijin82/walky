@@ -55,21 +55,17 @@ GTK4/libadwaita vapi files. Meson is not needed: the UI builds through a short
 into `~/.local/share/applications`, so the current build is what runs, without
 sudo. The version comes from [VERSION](VERSION).
 
-## Do I need to format the drive?
+## Which filesystem?
 
-No. Walky never formats anything and does not require a special layout. Mount
-the drive (GNOME does this automatically), then initialize the store:
+**Only ext4 is supported.** Walky checks the filesystem and refuses to
+initialize or open a store on anything else, because the store relies on POSIX
+permissions, symlinks and atomic renames. LUKS-encrypted ext4 works once the
+container is unlocked and mounted.
 
-```sh
-./bin/walky init /run/media/$USER/WALKY/WALKY
-```
-
-Any writable filesystem works. ext4 is recommended because it preserves file
-modes, symlinks and hardlinks; exFAT works for plain files but is
-case-insensitive and stores neither permissions nor symlinks. Encryption is
-optional and would require creating a LUKS container (M8), which is the only
-case where reformatting is needed. The optional `walky format` helper is a
-convenience for blank drives, never a prerequisite.
+Walky itself never formats a drive. If the flash drive currently uses another
+filesystem, reformat it to ext4 yourself (`mkfs.ext4 -L WALKY /dev/sdX`) and
+mount it again. A convenience helper for blank drives may arrive later, but it
+is optional and never automatic.
 
 ## Quick start (manual, no daemon)
 
@@ -85,11 +81,12 @@ convenience for blank drives, never a prerequisite.
 ```
 
 `--store` is the store directory on the drive, `--repo` is the synchronized
-folder. `init` creates the directory if needed and never formats a device, so a
-disk cannot be wiped by accident.
+folder. `init` creates the directory if needed, requires the mount to be ext4
+and never formats a device, so a disk cannot be wiped by accident.
 
-Current limitations: the UI has no settings or tray indicator yet, packaging is
-deferred, and the daemon only uses drives the desktop has already mounted;
+Current limitations: only ext4 drives are accepted; the UI has no settings or
+tray indicator yet; packaging is deferred; the daemon only uses drives the
+desktop has already mounted;
 auto-mounting through udisks2 without a polkit prompt is a follow-up.
 
 A repeated snapshot does not rehash the tree: the cache in
@@ -193,8 +190,25 @@ systemctl --user enable --now walky.service
 is in `data/99-walky-usb.rules` (commented out). Distribution packaging is
 deferred; the installer and README are the supported installation path for now.
 
+## Platform support
+
+Walky runs on Linux. The drive is ext4, which Windows and macOS cannot mount out
+of the box, so "plug into any computer and browse files" is explicitly not
+supported. Reading on another machine means a Linux live environment (or WSL2
+with `wsl --mount`) with Walky installed:
+
+```sh
+walky restore --store /mnt/WALKY --dest ~/Restored
+```
+
+Supporting Windows/macOS would require giving up ext4 guarantees, which was
+considered and rejected. LUKS2 encryption is **strongly recommended**: the drive
+is portable and easily lost. LUKS tooling is planned for M8; until then the
+config flag `require_luks` is advisory, not enforced.
+
 ## Data safety
 
 The drive is not a backup. Until a second replica exists, losing the drive means
-losing the data. ext4 is recommended, LUKS2 encryption is optional and planned
-for M8; neither is required to start using an existing drive.
+losing the data. The filesystem must be ext4. LUKS2 encryption is strongly
+recommended (tooling lands in M8); the `require_luks` config flag is advisory
+until then.

@@ -14,7 +14,7 @@ transport is a physical flash drive.
 - UI is Vala + GTK4/libadwaita (`ui/`), a separate process that talks over D-Bus
   only.
 - The drive is ext4 + LUKS2 with a `walky.json` marker; the on-drive format is
-  versioned.
+  versioned. Other filesystems are rejected (see `store.CheckFilesystem`).
 - Architecture and format rules — `docs/DESIGN.md` (the source of truth for the
   on-drive format and commit protocol). Live status and checklists — `PLAN.md`.
 
@@ -137,6 +137,8 @@ Additional rules:
 - No network calls: the project is offline by design.
 - `walky init` never formats a drive; `mkfs`/LUKS is a separate command with
   confirmation. Accidentally wiping a disk is unacceptable.
+- Every user-facing path checks `store.CheckFilesystem` before creating or
+  opening a store; do not add an "any filesystem" escape hatch.
 
 ## 6. Documentation
 
@@ -166,9 +168,9 @@ green):
 make install-local
 ```
 
-- Installs fresh `walky` and `walky-ui` into `~/.local/bin` and the desktop entry
-  into `~/.local/share/applications`, without root, so the user runs the new
-  build.
+- Installs fresh `walky` and `walky-ui` into `~/.local/bin` and the desktop
+  entry into `~/.local/share/applications`, without root, so the user runs the
+  new build.
 - Do **not** commit at this point; deploy and report only.
 - If the iteration is incomplete or checks are red, do not deploy.
 - System-wide installation (`sudo make install install-data`) and enabling

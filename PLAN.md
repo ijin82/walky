@@ -179,9 +179,9 @@ Packaging is deferred at the user's request; the installation path for now is
 
 ### M8 — hardening (optional, not required)
 
-Nothing here is needed to use an existing, already-formatted drive.
-`walky format` would be a convenience for blank drives, and encryption is the
-only feature that requires creating a new filesystem/LUKS container.
+Nothing here is needed to use an existing ext4 drive. `walky format` would be a
+convenience for blank drives (it would create ext4, optionally inside LUKS);
+encryption is the only feature that requires creating a new container.
 
 - [ ] Optional `walky format`: mkfs.ext4 (+LUKS2), confirmation, refuse mounted
       devices. Never invoked implicitly.
@@ -222,7 +222,14 @@ only feature that requires creating a new filesystem/LUKS container.
 
 ## Accepted decisions
 
-- The drive is read by Linux only → ext4 + LUKS2.
+- The drive is read by Linux only → ext4 + LUKS2, and every other filesystem is
+  rejected at init/open (LUKS-wrapped ext4 is fine once mounted).
+- Windows/macOS support is explicitly out of scope: those systems cannot mount
+  ext4, and giving up ext4 for plug-and-play readability was considered and
+  rejected. Reading elsewhere means a Linux live environment or WSL2 with the
+  normal `walky` CLI (`walky restore`).
+- LUKS2 is strongly recommended for portable drives. Tooling is M8, so
+  `require_luks` is advisory and not enforced yet.
 - Multiple machines → `machine-id`, per-machine base, generations.
 - Conflicts → keep both variants.
 - Stack → Go core/CLI + Vala/GTK4 UI over D-Bus.

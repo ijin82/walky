@@ -120,6 +120,7 @@ type Daemon struct {
 	log     *slog.Logger
 
 	sleepWatch func(context.Context) (<-chan bool, error)
+	checkFS    func(string) error
 
 	mu       sync.Mutex
 	emitter  Emitter
@@ -151,6 +152,7 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 		ejector:    ejectorFunc(device.Eject),
 		log:        log,
 		sleepWatch: device.WatchSleep,
+		checkFS:    store.CheckFilesystem,
 		state:      StateNoDevice,
 	}
 }
@@ -244,6 +246,12 @@ func (d *Daemon) overrideDevice() (device.Device, error) {
 }
 
 func (d *Daemon) attach(dev device.Device) {
+	if d.checkFS != nil {
+		if err := d.checkFS(dev.StoreRoot); err != nil {
+			d.log.Error("refusing drive", "root", dev.StoreRoot, "err", err)
+			return
+		}
+	}
 	if overlaps(d.cfg.RepoPath, dev.StoreRoot) || overlaps(dev.StoreRoot, d.cfg.RepoPath) {
 		d.log.Error("refusing drive because it overlaps the sync folder",
 			"repo", d.cfg.RepoPath, "store", dev.StoreRoot)

@@ -120,6 +120,7 @@ func testDaemon(t *testing.T, runner Runner, auto bool) (*Daemon, *fakeWatcher) 
 		ejector: ejectorFunc(func(context.Context, string) error { return nil }),
 		log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		state:   StateNoDevice,
+		checkFS: func(string) error { return nil },
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -325,3 +326,17 @@ func TestOverlappingPathsRejected(t *testing.T) {
 }
 
 var errTest = errors.New("runner failed")
+
+func TestFilesystemRejected(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+	d, w := testDaemon(t, runner, true)
+	d.checkFS = func(string) error { return errors.New("not ext4") }
+	w.events <- device.Event{Kind: device.Attached, Device: testDevice(t)}
+	time.Sleep(100 * time.Millisecond)
+	if runner.callCount() != 0 {
+		t.Fatal("store on an unsupported filesystem was synced")
+	}
+	if d.Status().Device != "" {
+		t.Fatal("unsupported store was accepted")
+	}
+}

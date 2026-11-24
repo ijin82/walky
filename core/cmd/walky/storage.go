@@ -31,6 +31,9 @@ func cmdInit(args []string) error {
 		return errors.New("usage: walky init <mountpoint> [--force]")
 	}
 
+	if err := store.CheckFilesystem(fs.Arg(0)); err != nil {
+		return err
+	}
 	st, err := store.Init(fs.Arg(0), *force)
 	if err != nil {
 		return err
@@ -256,6 +259,9 @@ func cmdVerify(args []string) error {
 func openStore(path string) (*store.Store, error) {
 	if path == "" {
 		return nil, errors.New("--store is required (mount point of the Walky drive)")
+	}
+	if err := store.CheckFilesystem(path); err != nil {
+		return nil, err
 	}
 	return store.Open(path)
 }

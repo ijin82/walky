@@ -15,6 +15,7 @@ import (
 	"walky/internal/engine"
 	"walky/internal/machineid"
 	"walky/internal/state"
+	"walky/internal/store"
 	"walky/internal/version"
 )
 
@@ -135,6 +136,9 @@ func directSync(cfgPath, storePath, repoPath string) error {
 	}
 	if storePath == "" {
 		return errors.New("--store is required with --direct")
+	}
+	if err := store.CheckFilesystem(storePath); err != nil {
+		return err
 	}
 	if isInside(repo, storePath) || isInside(storePath, repo) {
 		return fmt.Errorf("repo %s and store %s must not contain each other", repo, storePath)

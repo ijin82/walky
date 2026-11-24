@@ -39,7 +39,7 @@ disk. The local disk can be lost; a new machine must restore from the drive.
 |---|---|---|
 | Sync model | two-way, 3-way merge against the last common snapshot (base) | like Dropbox; without a base, "deleted" and "not yet downloaded" are indistinguishable |
 | Storage | CAS: blake3 hash → object; small files packed; snapshots are manifests | deduplication across versions, free renames, crash resilience |
-| Drive filesystem | **ext4 (+LUKS2)** for Linux only; exFAT if Windows/macOS access is needed | hardlinks/symlinks/modes/journal vs cross-platform |
+| Drive filesystem | **ext4 (+LUKS2) only**; other filesystems are rejected | hardlinks/symlinks/modes/journal; the store cannot degrade silently. Windows/macOS cannot mount ext4 and are out of scope |
 | Detection | user daemon + udisks2 D-Bus (no root); optionally udev+systemd for headless | udev cannot start user units; udisks already mounts in GNOME |
 | Core language | **Go** (single static binary, godbus, modernc/sqlite, blake3, zstd) | already using Go; the UI is thin |
 | UI language | **Vala + GTK4/libadwaita** (separate process, D-Bus) | minimal code for a native GNOME look; a UI crash does not break sync |
@@ -72,11 +72,13 @@ farm becomes possible (hardlinks on ext4), Windows compatibility is irrelevant �
    second drive (rotation), `walky verify` after writing, a UI warning when
    there is only one replica. The 3-2-1 rule still applies; an offline Dropbox
    does not replace it.
-2. **ext4 vs exFAT.** exFAT has no modes, symlinks, hardlinks or xattrs; it is
-   case-insensitive; mtime resolution is 10 ms; clusters are 32–128 KiB; there
-   is no journal. ext4 has everything, but Windows cannot read it. LUKS + ext4
-   is the best choice for Linux-only. Metadata (mode/uid/symlink/xattr) should
-   be recorded in the manifest anyway so restores are exact.
+2. **ext4 only.** exFAT has no modes, symlinks, hardlinks or xattrs, is
+   case-insensitive, has 10 ms mtime resolution, 32–128 KiB clusters and no
+   journal; supporting it would silently degrade the store. Walky therefore
+   checks the filesystem (`store.CheckFilesystem`) and refuses to initialize or
+   open a store elsewhere. LUKS-wrapped ext4 is accepted once mounted. Metadata
+   (mode/uid/symlink/xattr) is still recorded in the manifest so restores are
+   exact.
 3. **Cluster overhead and small files.** 200k files of 20 KiB on exFAT with
    128 KiB clusters waste roughly 25 GB. Solution: pack small objects into
    16–32 MiB packs. That also removes per-file `fsync`.

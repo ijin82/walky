@@ -154,27 +154,14 @@ func (s *Store) GC(opts GCOptions) (*GCReport, error) {
 }
 
 func (s *Store) snapshotInfos() ([]snapshotInfo, error) {
-	entries, err := os.ReadDir(filepath.Join(s.root, snapshotsDir))
+	metas, err := s.snapshotMetas()
 	if err != nil {
 		return nil, err
 	}
-	var out []snapshotInfo
-	for _, de := range entries {
-		name := de.Name()
-		if de.IsDir() || !strings.HasSuffix(name, ".meta.json") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(s.root, snapshotsDir, name))
-		if err != nil {
-			return nil, err
-		}
-		var meta Meta
-		if err := json.Unmarshal(data, &meta); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", name, err)
-		}
-		out = append(out, snapshotInfo{gen: meta.Gen, created: meta.Created})
+	out := make([]snapshotInfo, 0, len(metas))
+	for _, m := range metas {
+		out = append(out, snapshotInfo{gen: m.Gen, created: m.Created})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].gen > out[j].gen })
 	return out, nil
 }
 
