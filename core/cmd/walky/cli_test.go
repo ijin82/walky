@@ -123,8 +123,9 @@ func TestCLIConfigRejectsBadValues(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.toml")
 	writeTestFile(t, cfgPath, "[repo]\npath = \"~/Sync\"\n\n[sync]\nmode = \"sideways\"\n")
 	allowAnyFS(t)
-	if err := run([]string{"status", "--config", cfgPath}); err == nil ||
-		!strings.Contains(err.Error(), "unknown value") {
+	err := run([]string{"snapshot", "--config", cfgPath,
+		"--store", t.TempDir(), "--repo", t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "unknown value") {
 		t.Fatalf("bad mode accepted: %v", err)
 	}
 }

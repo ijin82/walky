@@ -37,6 +37,8 @@ auto_gc = true
 gc_interval_hours = 24
 
 [device]
+# Only used when the desktop does not mount the drive itself.
+label = "WALKY"
 auto_sync = true
 auto_mount = true
 eject_after_sync = false

@@ -71,6 +71,7 @@ func cmdDaemon(args []string) error {
 		Machine:       machine,
 		AutoSync:      cfg.Device.AutoSync,
 		AutoMount:     cfg.Device.AutoMount,
+		DeviceLabel:   cfg.Device.Label,
 		AutoGC:        cfg.Maintenance.AutoGC,
 		GCInterval:    time.Duration(cfg.Maintenance.GCIntervalHours) * time.Hour,
 		StoreOverride: *deviceRoot,

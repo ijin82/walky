@@ -67,17 +67,22 @@ filesystem, reformat it to ext4 yourself (`mkfs.ext4 -L WALKY /dev/sdX`) and
 mount it again. A convenience helper for blank drives may arrive later, but it
 is optional and never automatic.
 
-For automatic mounting, label the filesystem `WALKY`:
+The filesystem label is **only** used by the automount fallback; it is not the
+store marker. The marker is `<mount>/WALKY/walky.json` (or `<mount>/walky.json`),
+and any mounted drive with it is detected regardless of the label. Set the label
+in the config to match an existing drive:
 
-```sh
-e2label /dev/sdX WALKY
+```toml
+[device]
+label = "ijin_c"
 ```
 
 GNOME normally mounts removable drives itself. If nothing mounts the drive, the
-daemon asks udisks2 to mount any unmounted filesystem labelled `WALKY`
-(`auto_mount = true`, on by default). LUKS is not unlocked by Walky: the desktop
-asks for the passphrase and the ext4 filesystem appears afterwards. `walky init`
-prints a warning when the filesystem is not inside LUKS; it is advisory and
+daemon asks udisks2 to mount any unmounted filesystem with that label
+(`auto_mount = true`, on by default). When the desktop already mounted the
+drive, no label or `e2label` step is needed. LUKS is not unlocked by Walky: the
+desktop asks for the passphrase and the ext4 filesystem appears afterwards.
+`walky init` warns when the filesystem is not inside LUKS; it is advisory and
 never blocks initialization.
 
 ## Quick start (manual, no daemon)

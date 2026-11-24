@@ -119,8 +119,9 @@ Only manual hardware/session checks and an optional tray fallback remain.
 ## Known limitations
 
 - Linux only; ext4 only. Windows/macOS cannot mount the drive.
-- Automount only considers filesystems labelled `WALKY`; the desktop can still
-  mount other drives, but Walky will not do it for them.
+- Automount only considers filesystems with the configured `[device] label`
+  (default `WALKY`); when the desktop mounts the drive, the label is irrelevant
+  and detection uses `walky.json`.
 - The UI polls status once per second; it does not subscribe to signals yet.
 - Deletions are inferred from the base; explicit tombstone entries are not
   stored in manifests.

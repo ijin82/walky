@@ -44,7 +44,8 @@ func cmdInit(args []string) error {
 	fmt.Printf("repo_id: %s\n", m.RepoID)
 	fmt.Printf("format:  %d\n", m.Format)
 	fmt.Printf("\nPin the drive identity in ~/.config/walky/config.toml:\n\n[repo]\npath = \"~/Sync\"\nrepo_id = %q\n", m.RepoID)
-	fmt.Println("\nTip: label the filesystem WALKY (e2label /dev/sdX WALKY) so the daemon can automount it.")
+	fmt.Println("\nTip: if the desktop does not automount the drive, give the filesystem a label")
+	fmt.Println("     (e2label /dev/sdX WALKY) and match it with [device] label in the config.")
 	if encrypted, known := device.EncryptionStatus(st.Root()); known && !encrypted {
 		fmt.Fprintln(os.Stderr, "warning: this drive is not encrypted. LUKS2 is strongly recommended: a lost or stolen drive exposes all data.")
 	}

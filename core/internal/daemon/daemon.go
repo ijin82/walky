@@ -300,6 +300,10 @@ func (d *Daemon) applyConfig(cfg config.Config) error {
 	d.cfg.Conflict = string(cfg.Sync.Conflict)
 	d.cfg.AutoSync = cfg.Device.AutoSync
 	d.cfg.AutoMount = cfg.Device.AutoMount
+	d.cfg.DeviceLabel = cfg.Device.Label
+	if d.cfg.DeviceLabel == "" {
+		d.cfg.DeviceLabel = device.DefaultLabel
+	}
 	d.cfg.AutoGC = cfg.Maintenance.AutoGC
 	if cfg.Maintenance.GCIntervalHours > 0 {
 		d.cfg.GCInterval = time.Duration(cfg.Maintenance.GCIntervalHours) * time.Hour

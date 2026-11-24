@@ -31,11 +31,11 @@ namespace Walky {
                     GLib.BusType.SESSION, GLib.DBusProxyFlags.NONE, null,
                     "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
                     "org.freedesktop.portal.Background", null);
-                var options = new GLib.VariantDict();
-                options.insert_value("reason",
+                var builder = new GLib.VariantBuilder(new GLib.VariantType("a{sv}"));
+                builder.add("{sv}", "reason",
                     new GLib.Variant("s", "Walky keeps the drive in sync in the background"));
-                options.insert_value("autostart", new GLib.Variant("b", false));
-                var args = new GLib.Variant("(sa{sv})", "", options.end());
+                builder.add("{sv}", "autostart", new GLib.Variant("b", false));
+                var args = new GLib.Variant("(sa{sv})", "", builder);
                 proxy.call.begin("RequestBackground", args,
                     GLib.DBusCallFlags.NONE, 5000, null, (obj, res) => {
                         try {

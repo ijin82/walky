@@ -87,9 +87,12 @@ type Maintenance struct {
 
 // Device tunes drive detection.
 type Device struct {
-	AutoSync       bool `toml:"auto_sync"`
-	AutoMount      bool `toml:"auto_mount"`
-	EjectAfterSync bool `toml:"eject_after_sync"`
+	// Label is the filesystem label used only for the automount fallback.
+	// It is not the store marker; mounted drives are detected by walky.json.
+	Label          string `toml:"label"`
+	AutoSync       bool   `toml:"auto_sync"`
+	AutoMount      bool   `toml:"auto_mount"`
+	EjectAfterSync bool   `toml:"eject_after_sync"`
 }
 
 // DefaultPath returns the default config location.
@@ -125,7 +128,7 @@ func Default() Config {
 		}},
 		Retention:   Retention{Daily: 14, Weekly: 8, Monthly: 6, TrashDays: 30, MachineDays: 180},
 		Maintenance: Maintenance{AutoGC: true, GCIntervalHours: 24},
-		Device:      Device{AutoSync: true, AutoMount: true},
+		Device:      Device{Label: "WALKY", AutoSync: true, AutoMount: true},
 	}
 }
 
@@ -173,6 +176,9 @@ func (c Config) Validate() error {
 	case ConflictCopy, ConflictNewest, ConflictLocalWins:
 	default:
 		return fmt.Errorf("sync.conflict: unknown value %q", c.Sync.Conflict)
+	}
+	if strings.TrimSpace(c.Device.Label) == "" {
+		return errors.New("device.label must not be empty")
 	}
 	if c.Sync.DebounceMS < 0 || c.Sync.FullScanMin < 0 {
 		return errors.New("sync.debounce_ms and sync.full_scan_min must be >= 0")
