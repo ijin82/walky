@@ -35,7 +35,7 @@ make run-ui         # запустить окно
 ./bin/walky status --json
 ```
 
-Нужны Go ≥ 1.24 (используются `log/slog`, далее `os.Root`) и Vala с vapi для
+Нужны Go ≥ 1.26 (`os.Root` с MkdirAll/Chtimes, `log/slog`) и Vala с vapi для
 GTK4/libadwaita. Meson не требуется: UI собирается коротким `ui/Makefile`.
 
 ## Быстрый старт (M1, без демона)
