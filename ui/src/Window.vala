@@ -52,7 +52,9 @@ namespace Walky {
             header.pack_end(build_menu_button());
 
             banner = new Adw.Banner("Daemon unavailable");
+            banner.button_label = "Start";
             banner.revealed = false;
+            banner.button_clicked.connect(() => api.start_daemon());
 
             var content = new Gtk.Box(Gtk.Orientation.VERTICAL, 18);
             content.margin_top = 18;

@@ -90,9 +90,25 @@ namespace Walky {
                     GLib.DBusCallFlags.NONE, 2000, null);
                 status_updated(reply.get_child_value(0));
             } catch (Error e) {
-                unavailable(e.message);
+                var message = e.message;
+                if (message.contains("ServiceUnknown") ||
+                    message.contains("NameHasNoOwner") ||
+                    message.contains("was not provided by any .service files")) {
+                    unavailable("Walky daemon is not running");
+                } else {
+                    unavailable(message);
+                }
                 try_start_daemon();
             }
+        }
+
+        public void start_daemon () {
+            daemon_start_attempted = false;
+            try_start_daemon();
+            GLib.Timeout.add_seconds(1, () => {
+                refresh();
+                return false;
+            });
         }
 
         private async void fetch_settings_async () {
