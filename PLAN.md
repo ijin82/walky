@@ -18,7 +18,7 @@ Version: `0.1.0` · updated: 2026-11-24
 | M5 | Retention and GC | ✅ done |
 | M6 | Desktop UI | ✅ done |
 | M7 | Packaging (rpm/ALT, man page) | ⏸ deferred |
-| M8 | Optional hardening (format helper, encryption tooling) | ⬜ optional |
+| M8 | Optional hardening (soak and crash tests) | ⬜ optional |
 
 ## Done
 
@@ -111,9 +111,6 @@ hardware/session checks remain.
 
 ### P3 — M8 hardening (optional)
 
-- [ ] Optional `walky format`: `mkfs.ext4` and, with an explicit flag, a LUKS2
-      container. Confirmation required, mounted devices refused, never implicit.
-- [ ] Manifest signing (ed25519) with a `repo_id` allowlist.
 - [ ] Long-running soak and crash tests across machines.
 
 ### Deferred
