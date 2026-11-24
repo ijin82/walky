@@ -39,9 +39,10 @@ namespace Walky {
                 proxy.call.begin("RequestBackground", args,
                     GLib.DBusCallFlags.NONE, 5000, null, (obj, res) => {
                         try {
-                            proxy.call.end(res);
+                            var handle = proxy.call.end(res);
+                            debug("background portal registered: %s", handle.print(true));
                         } catch (Error e) {
-                            debug("background portal: %s", e.message);
+                            debug("background portal failed: %s", e.message);
                         }
                     });
             } catch (Error e) {
