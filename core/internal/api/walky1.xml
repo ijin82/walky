@@ -1,5 +1,5 @@
 <node>
-  <!-- M3: implemented by `walky daemon` on the session bus. -->
+  <!-- Implemented by `walky daemon` on the session bus. -->
   <interface name="io.github.ijin.Walky1">
     <method name="SyncNow">
       <arg type="b" direction="in" name="wait"/>
@@ -10,13 +10,44 @@
     <method name="GetStatus">
       <arg type="a{sv}" direction="out" name="status"/>
     </method>
+    <method name="GetDrives">
+      <arg type="a(ssssbxb)" direction="out" name="drives"/>
+    </method>
+    <method name="InitStore">
+      <arg type="s" direction="in" name="mount_point"/>
+      <arg type="s" direction="in" name="repo_path"/>
+      <arg type="s" direction="out" name="repo_id"/>
+    </method>
+    <method name="UseStore">
+      <arg type="s" direction="in" name="mount_point"/>
+      <arg type="s" direction="in" name="repo_path"/>
+      <arg type="s" direction="out" name="repo_id"/>
+    </method>
+    <method name="PreviewRecovery">
+      <arg type="(iiiii)" direction="out" name="preview"/>
+    </method>
+    <method name="StartRecovery"/>
+    <method name="GetSettings">
+      <arg type="a{sv}" direction="out" name="settings"/>
+    </method>
+    <method name="SetSettings">
+      <arg type="as" direction="in" name="excludes"/>
+      <arg type="i" direction="in" name="daily"/>
+      <arg type="i" direction="in" name="weekly"/>
+      <arg type="i" direction="in" name="monthly"/>
+      <arg type="i" direction="in" name="trash_days"/>
+      <arg type="s" direction="in" name="conflict"/>
+      <arg type="i" direction="in" name="poll_seconds"/>
+    </method>
+    <method name="ReloadConfig"/>
     <method name="GetEvents">
       <arg type="u" direction="in" name="limit"/>
-      <arg type="a(ssstt)" direction="out" name="events"/>
+      <arg type="a(sssxx)" direction="out" name="events"/>
     </method>
     <method name="Eject"/>
     <method name="Verify">
       <arg type="b" direction="in" name="full"/>
+      <arg type="s" direction="out" name="summary"/>
     </method>
 
     <signal name="StateChanged">
@@ -25,7 +56,7 @@
     <signal name="Progress">
       <arg type="u" name="done"/>
       <arg type="u" name="total"/>
-      <arg type="t" name="bytes"/>
+      <arg type="x" name="bytes"/>
     </signal>
     <signal name="FileDone">
       <arg type="s" name="path"/>

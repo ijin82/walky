@@ -1,9 +1,14 @@
 package api
 
 import (
+	"encoding/xml"
 	"io"
 	"log/slog"
+	"reflect"
 	"testing"
+
+	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/introspect"
 
 	"walky/internal/daemon"
 )
@@ -44,5 +49,36 @@ func TestEmitWithoutConnectionIsSafe(t *testing.T) {
 	s.FileDone("a", "push", "ok")
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close = %v", err)
+	}
+}
+
+func TestIntrospectionMatchesService(t *testing.T) {
+	var node introspect.Node
+	if err := xml.Unmarshal([]byte(walky1XML), &node); err != nil {
+		t.Fatalf("parse walky1.xml: %v", err)
+	}
+	if len(node.Interfaces) != 1 || node.Interfaces[0].Name != Interface {
+		t.Fatalf("interfaces = %+v", node.Interfaces)
+	}
+	xmlMethods := map[string]bool{}
+	for _, m := range node.Interfaces[0].Methods {
+		xmlMethods[m.Name] = true
+	}
+
+	dbusErrType := reflect.TypeOf((*dbus.Error)(nil))
+	svcType := reflect.TypeOf(&Service{})
+	for i := 0; i < svcType.NumMethod(); i++ {
+		m := svcType.Method(i)
+		mt := m.Type
+		if mt.NumOut() == 0 || mt.Out(mt.NumOut()-1) != dbusErrType {
+			continue
+		}
+		if !xmlMethods[m.Name] {
+			t.Errorf("D-Bus method %s is missing from walky1.xml", m.Name)
+		}
+		delete(xmlMethods, m.Name)
+	}
+	for name := range xmlMethods {
+		t.Errorf("walky1.xml declares method %s that does not exist on *Service", name)
 	}
 }

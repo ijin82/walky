@@ -3,15 +3,20 @@ package api
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/introspect"
 
 	"walky/internal/daemon"
 )
+
+//go:embed walky1.xml
+var walky1XML string
 
 // ErrAlreadyRunning means another daemon owns the bus name.
 var ErrAlreadyRunning = errors.New("another walky daemon is already running")
@@ -59,6 +64,11 @@ func New(d *daemon.Daemon, log *slog.Logger) (*Service, error) {
 		_, _ = conn.ReleaseName(BusName)
 		_ = conn.Close()
 		return nil, fmt.Errorf("export %s: %w", ObjectPath, err)
+	}
+	if err := conn.Export(introspect.Introspectable(walky1XML), ObjectPath, "org.freedesktop.DBus.Introspectable"); err != nil {
+		_, _ = conn.ReleaseName(BusName)
+		_ = conn.Close()
+		return nil, fmt.Errorf("export introspectable %s: %w", ObjectPath, err)
 	}
 	d.SetEmitter(s)
 	return s, nil
