@@ -114,7 +114,7 @@ func testDaemon(t *testing.T, runner Runner, auto bool) (*Daemon, *fakeWatcher) 
 	t.Helper()
 	w := &fakeWatcher{events: make(chan device.Event, 8)}
 	d := &Daemon{
-		cfg:     Config{RepoPath: t.TempDir(), AutoSync: auto, Machine: "test"},
+		cfg:     Config{RepoPath: t.TempDir(), AutoSync: auto, Machine: "test", NoTray: true},
 		watcher: w,
 		runner:  runner,
 		ejector: ejectorFunc(func(context.Context, string) error { return nil }),

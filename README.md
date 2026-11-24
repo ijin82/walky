@@ -9,7 +9,7 @@ Status: **M0–M6**. Storage, daemon, two-way sync, GC, manual trash management
 and a GTK4 window work: `init`, `snapshot`, `ls`, `head`, `restore`, `verify`,
 `daemon`, `status`, `sync`, `eject`, `gc`, `trash` — blake3 CAS, generations,
 atomic commits, packs, drive detection, conflict handling and a desktop UI.
-Settings, a tray indicator and packaging are still to come.
+Settings and a tray indicator are in place; distribution packaging is deferred.
 Architecture — [docs/DESIGN.md](docs/DESIGN.md), status and plan —
 [PLAN.md](PLAN.md).
 
@@ -102,9 +102,7 @@ never blocks initialization.
 folder. `init` creates the directory if needed, requires the mount to be ext4
 and never formats a device, so a disk cannot be wiped by accident.
 
-Current limitations: only ext4 drives are accepted; the UI has no settings or
-tray indicator yet; packaging is deferred; the daemon only uses drives the
-desktop has already mounted;
+Current limitations: only ext4 drives are accepted; packaging is deferred;
 auto-mounting through udisks2 without a polkit prompt is a follow-up.
 
 A repeated snapshot does not rehash the tree: the cache in
@@ -145,9 +143,16 @@ store itself.
 Settings (excludes, retention, conflict policy) are edited in the window and
 sent to the daemon, which validates, saves and applies them immediately; the UI
 never writes TOML itself. Note that saving rewrites the config file and drops
-comments. Closing the window hides it and keeps the app running in the
-background; the Background portal makes GNOME list it as a background app. If
-the daemon is not running, the UI asks the user systemd manager to start
+comments.
+
+Closing the window hides it; the app stays alive and a tray icon remains in the
+top bar. The icon belongs to the daemon (StatusNotifierItem), so it is visible
+even when the window is closed and survives UI restarts. It needs the
+“AppIndicator and KStatusNotifierItem Support” GNOME extension (already present
+here). The menu offers Sync now, Pause/Resume, Open Walky, Verify integrity and
+Quit. The Background portal is no longer used.
+
+If the daemon is not running, the UI asks the user systemd manager to start
 `walky.service` once and keeps polling.
 
 ## Trash

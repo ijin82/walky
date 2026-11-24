@@ -16,7 +16,7 @@ Version: `0.1.0` · updated: 2026-11-24
 | M3 | Daemon: drive detection, D-Bus, systemd unit, events | ✅ done |
 | M4 | Two-way sync: bases, deletions, conflicts, trash | ✅ done |
 | M5 | Retention and GC | ✅ done |
-| M6 | Desktop UI | ✅ done (tray optional) |
+| M6 | Desktop UI | ✅ done |
 | M7 | Packaging (rpm/ALT, man page) | ⏸ deferred |
 | M8 | Optional hardening (format helper, encryption tooling) | ⬜ optional |
 
@@ -39,9 +39,10 @@ Version: `0.1.0` · updated: 2026-11-24
   space, progress, last five files, sync/pause/verify/eject, notifications.
 - **UI settings** — excludes, retention and conflict policy are edited in a
   preferences window and sent over D-Bus; the daemon validates, persists and
-  applies them immediately. Closing the window keeps the app alive in the
-  background (Background portal), and a missing daemon is started through
-  systemd on demand.
+  applies them immediately. Closing the window keeps the app alive.
+- **Tray** — the daemon owns a StatusNotifierItem (AppIndicator) with a menu for
+  sync, pause, open, verify and quit; the icon path is independent of the UI.
+  A missing daemon is started through systemd on demand.
 - **Packaging surface** — `install.sh` (local/system/uninstall), systemd user
   unit, `.desktop`, icon in hicolor (SVG + PNG 16–256), `VERSION`.
 - **Policy** — Linux-only, ext4-only enforced at init/CLI/daemon; LUKS optional
@@ -52,19 +53,18 @@ Version: `0.1.0` · updated: 2026-11-24
 
 ### P1 — finished
 
-Settings, background mode, daemon autostart and udisks automount are in place.
-Only manual hardware/session checks and an optional tray fallback remain.
+Settings, tray, daemon autostart and udisks automount are in place. Only manual
+hardware/session checks remain.
 
 ### P1 — desktop follow-ups
 
 - [x] Settings window with immediate apply (D-Bus `GetSettings`/`SetSettings`,
       daemon validates and rewrites the config).
-- [x] Keep the app alive after the window closes (Background portal, window is
-      hidden instead of destroyed).
+- [x] Keep the app alive after the window closes (window is hidden instead of
+      destroyed).
 - [x] Start `walky.service` through the user systemd manager when the daemon is
       not running.
-- [ ] Optional tray icon (StatusNotifierItem) as a fallback for desktops without
-      the Background portal (not required on GNOME).
+- [x] StatusNotifierItem tray icon owned by the daemon; no Background portal.
 - [ ] Manual checks MT-10…MT-14 and MT-20…MT-23 on a real session.
 
 ### P1 — drive lifecycle
@@ -157,7 +157,7 @@ Only manual hardware/session checks and an optional tray fallback remain.
 3. Transparent `current/` tree on the drive (hardlink farm, ext4 only)?
 4. One drive or two for rotation?
 5. Keep both `local-wins` and `newest` conflict policies, or only “keep both”?
-6. Background portal vs StatusNotifierItem for the “still running” indicator?
+6. Tray menu: is “Quit” expected to stop only the daemon, or the UI too?
 
 ## Accepted decisions
 

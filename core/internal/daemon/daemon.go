@@ -19,6 +19,7 @@ import (
 	"walky/internal/engine"
 	"walky/internal/state"
 	"walky/internal/store"
+	"walky/internal/tray"
 )
 
 const maxEvents = 200
@@ -94,6 +95,7 @@ type Config struct {
 	DeviceLabel   string
 	AutoGC        bool
 	GCInterval    time.Duration
+	NoTray        bool
 }
 
 // RetentionSettings mirrors the [retention] section for the UI.
@@ -159,6 +161,8 @@ type Daemon struct {
 	mounter    Mounter
 	mounting   bool
 	gcRunning  bool
+	trayItem   *tray.Tray
+	shutdown   context.CancelFunc
 
 	mu       sync.Mutex
 	emitter  Emitter
@@ -331,6 +335,14 @@ func (d *Daemon) SetEmitter(e Emitter) {
 
 // Run processes device events until ctx is cancelled.
 func (d *Daemon) Run(ctx context.Context) error {
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	d.mu.Lock()
+	d.shutdown = cancel
+	d.mu.Unlock()
+	d.startTray(runCtx)
+	ctx = runCtx
+
 	if d.cfg.StoreOverride != "" {
 		dev, err := d.overrideDevice()
 		if err != nil {
@@ -386,6 +398,53 @@ func (d *Daemon) Run(ctx context.Context) error {
 				d.tryAutoSync()
 			}
 		}
+	}
+}
+
+func (d *Daemon) startTray(ctx context.Context) {
+	if d.cfg.NoTray {
+		return
+	}
+	t, err := tray.New(tray.Actions{
+		Snapshot: func() tray.Snapshot {
+			st := d.Status()
+			return tray.Snapshot{
+				State: st.State, Device: st.Device,
+				Generation: st.Generation, Paused: st.Paused,
+			}
+		},
+		SyncNow: func() { _ = d.SyncNow(false) },
+		TogglePause: func() bool {
+			st := d.Status()
+			d.Pause(!st.Paused)
+			return !st.Paused
+		},
+		OpenUI: tray.OpenUI,
+		Verify: func() {
+			go func() {
+				if _, err := d.Verify(false); err != nil {
+					d.log.Warn("tray verify failed", "err", err)
+				}
+			}()
+		},
+		Quit: d.quit,
+	})
+	if err != nil {
+		d.log.Debug("tray unavailable", "err", err)
+		return
+	}
+	d.mu.Lock()
+	d.trayItem = t
+	d.mu.Unlock()
+	go t.Run(ctx)
+}
+
+func (d *Daemon) quit() {
+	d.mu.Lock()
+	cancel := d.shutdown
+	d.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 

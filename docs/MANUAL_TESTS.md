@@ -152,10 +152,12 @@ session.
 Open the app. Expected: status, free space, last 5 files and progress are
 visible and update during a sync.
 
-### MT-21 Visible as running
+### MT-21 Tray and background mode
 
-Close the window, check GNOME Quick Settings / the tray. Expected: the app is
-listed as running in the background and can be reopened.
+Close the window and look at the top bar. Expected: a Walky tray icon is
+present; its menu offers Sync now, Pause/Resume, Open Walky, Verify integrity and
+Quit; “Open Walky” restores the window. The icon must also survive restarting
+`walky-ui`.
 
 ### MT-22 Notifications
 

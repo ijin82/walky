@@ -24,6 +24,7 @@ func cmdDaemon(args []string) error {
 	deviceRoot := fs.String("device", "", "use this store directory instead of auto-detection (testing)")
 	repoOverride := fs.String("repo", "", "local folder to sync (default: repo.path)")
 	interval := fs.Duration("interval", 2*time.Second, "mount table poll interval")
+	noTray := fs.Bool("no-tray", false, "do not register a StatusNotifierItem")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -74,6 +75,7 @@ func cmdDaemon(args []string) error {
 		DeviceLabel:   cfg.Device.Label,
 		AutoGC:        cfg.Maintenance.AutoGC,
 		GCInterval:    time.Duration(cfg.Maintenance.GCIntervalHours) * time.Hour,
+		NoTray:        *noTray,
 		StoreOverride: *deviceRoot,
 		Interval:      *interval,
 		Mode:          string(cfg.Sync.Mode),
