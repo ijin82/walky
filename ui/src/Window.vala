@@ -17,6 +17,8 @@ namespace Walky {
         private Gtk.Button pause_button;
         private SettingsWindow? settings_window;
         private InitWindow? init_window;
+        private RecoveryWindow? recovery_window;
+        private Gtk.Button recovery_button;
         private string last_state = "";
 
         public Window (Gtk.Application app, Api api) {
@@ -84,6 +86,7 @@ namespace Walky {
             menu.append("Verify integrity", "win.verify");
             menu.append("Eject drive", "win.eject");
             menu.append("Set up a drive…", "win.setup");
+            menu.append("Recover drive…", "win.recover");
             menu.append("Settings…", "win.settings");
             menu.append("Quit", "app.quit");
 
@@ -117,6 +120,10 @@ namespace Walky {
             var setup_action = new GLib.SimpleAction("setup", null);
             setup_action.activate.connect(open_setup);
             actions.add_action(setup_action);
+
+            var recover_action = new GLib.SimpleAction("recover", null);
+            recover_action.activate.connect(open_recovery);
+            actions.add_action(recover_action);
 
             insert_action_group("win", actions);
             return button;
@@ -193,6 +200,12 @@ namespace Walky {
             var setup_button = new Gtk.Button.with_label("Set up a drive");
             setup_button.clicked.connect(open_setup);
             box.append(setup_button);
+
+            recovery_button = new Gtk.Button.with_label("Recover drive…");
+            recovery_button.add_css_class("destructive-action");
+            recovery_button.visible = false;
+            recovery_button.clicked.connect(open_recovery);
+            box.append(recovery_button);
             return box;
         }
 
@@ -201,6 +214,11 @@ namespace Walky {
                 init_window = new InitWindow(application as Gtk.Application, api);
             }
             init_window.present();
+        }
+
+        private void open_recovery () {
+            recovery_window = new RecoveryWindow(application as Gtk.Application, api);
+            recovery_window.present();
         }
 
         private void open_settings () {
@@ -250,10 +268,11 @@ namespace Walky {
             pause_button.label = paused ? "Resume" : "Pause";
 
             var error = string_value(status, "last_error");
-            banner.revealed = error != "";
-            if (error != "") {
+            banner.revealed = error != "" && state != "needs_recovery";
+            if (error != "" && state != "needs_recovery") {
                 banner.title = error;
             }
+            recovery_button.visible = state == "needs_recovery";
 
             if (state == "idle" && last_state == "syncing") {
                 send_notification("Sync finished", "Generation %s".printf(generation.to_string()));
@@ -328,6 +347,7 @@ namespace Walky {
                 case "paused": return "Paused";
                 case "error": return "Error";
                 case "no_device": return "No drive";
+                case "needs_recovery": return "Recovery required";
                 default: return state;
             }
         }
@@ -341,6 +361,8 @@ namespace Walky {
                 case "attach": return "Attached";
                 case "detach": return "Detached";
                 case "sync": return "Sync";
+                case "recovery": return "Recovery";
+                case "recover": return "Recovery";
                 default: return op;
             }
         }

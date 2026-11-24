@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,9 @@ const (
 	ModePushOnly = "push-only"
 	ModeTwoWay   = "two-way"
 )
+
+// ErrDifferentStore means the local base belongs to another repository.
+var ErrDifferentStore = errors.New("base belongs to a different store")
 
 // Conflict policies.
 const (
@@ -48,6 +52,21 @@ type Options struct {
 	BasePath string
 	// TrashDir receives files deleted locally by a sync.
 	TrashDir string
+	// StoreRepoID is the repo_id of the mounted store; when it differs from
+	// the base metadata the run needs Recover.
+	StoreRepoID string
+	// Recover performs an additive recovery merge: no deletions, conflicts keep
+	// both variants. It is used after a store is rebuilt or adopted.
+	Recover bool
+}
+
+// PreviewResult summarizes a plan without applying it.
+type PreviewResult struct {
+	Push      int
+	Pull      int
+	Conflicts int
+	Deletes   int
+	Total     int
 }
 
 // Progress is one step of a run.

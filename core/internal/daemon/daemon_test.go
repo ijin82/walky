@@ -275,7 +275,7 @@ func TestEventsRecorded(t *testing.T) {
 	}
 }
 
-func TestRepoIDMismatchIgnored(t *testing.T) {
+func TestRepoIDMismatchNeedsRecovery(t *testing.T) {
 	runner := &fakeRunner{started: make(chan struct{}, 1)}
 	d, w := testDaemon(t, runner, true)
 	d.cfg.RepoID = strings.Repeat("b", 32)
@@ -284,8 +284,12 @@ func TestRepoIDMismatchIgnored(t *testing.T) {
 	if runner.callCount() != 0 {
 		t.Fatal("foreign drive was synced")
 	}
-	if d.Status().Device != "" {
-		t.Fatal("foreign drive was accepted")
+	st := d.Status()
+	if st.Device == "" {
+		t.Fatal("foreign drive is not shown")
+	}
+	if st.State != StateNeedsRecovery {
+		t.Fatalf("state = %q, want %q", st.State, StateNeedsRecovery)
 	}
 }
 
@@ -515,5 +519,81 @@ func TestUseStoreReattachesImmediately(t *testing.T) {
 	}
 	if d.dev == nil || d.dev.StoreRoot != storeRoot {
 		t.Fatalf("store was not attached: %+v", d.dev)
+	}
+}
+
+func TestRecoveryMergesWithoutDeleting(t *testing.T) {
+	root := t.TempDir()
+	storeRoot := filepath.Join(root, "store")
+	st, err := store.Init(storeRoot, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newID := st.Marker().RepoID
+	repo := filepath.Join(root, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(root, "config.toml")
+	cfg := config.Default()
+	cfg.Repo.Path = repo
+	cfg.Repo.RepoID = "old-repo"
+	cfg.Device.AutoSync = false
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	basePath := filepath.Join(root, "base")
+	trash := filepath.Join(root, "trash")
+	d := New(Config{
+		RepoPath: repo, RepoID: "old-repo", ConfigPath: cfgPath,
+		BasePath: basePath, TrashDir: trash, IndexPath: filepath.Join(root, "index.db"),
+		Machine: "test", Mode: "two-way", Conflict: "copy", NoTray: true,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d.checkFS = func(string) error { return nil }
+	dev := device.Device{
+		MountPoint: storeRoot, StoreRoot: storeRoot, Label: "test", Marker: st.Marker(),
+	}
+	d.attach(dev)
+	if got := d.Status().State; got != StateNeedsRecovery {
+		t.Fatalf("state = %q, want needs_recovery", got)
+	}
+	d.scanStores = func() ([]device.Device, error) { return []device.Device{dev}, nil }
+
+	if err := d.StartRecovery(); err != nil {
+		t.Fatalf("StartRecovery: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if st := d.Status().State; st == StateIdle {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	stt := d.Status()
+	if stt.State != StateIdle {
+		t.Fatalf("state after recovery = %q (%s)", stt.State, stt.LastError)
+	}
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Repo.RepoID != newID {
+		t.Fatalf("config repo_id = %q, want %q", loaded.Repo.RepoID, newID)
+	}
+	latest, _, err := st.Latest()
+	if err != nil {
+		t.Fatalf("latest: %v", err)
+	}
+	found := false
+	for _, e := range latest.Entries {
+		if e.Path == "keep.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("recovery did not upload keep.txt")
 	}
 }

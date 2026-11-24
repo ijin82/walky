@@ -135,9 +135,9 @@ from, so a concurrent writer is reported instead of overwritten.
 
 ## Lost or failed drive
 
-The drive is the only copy of the version history. The current files also exist
-on every machine, but old generations, the drive trash and other machines'
-records exist only on the drive. If it is lost, the history is gone; the current
+The drive is the only copy of the version history. Current files also exist on
+every machine, but old generations, the drive trash and other machines' records
+exist only on the drive. If it is lost, the history is gone; the current
 content can be rebuilt into a new store.
 
 Before doing anything, preserve the unsynced work:
@@ -145,25 +145,34 @@ Before doing anything, preserve the unsynced work:
 1. Stop the daemon on both machines (`systemctl --user stop walky.service`).
 2. Copy the local sync folder somewhere safe on both machines.
 3. Copy `~/.local/state/walky` (base manifest, index, trash) and
-   `~/.config/walky/config.toml` from both machines. The base manifest is what
-   lets an unsynced machine merge instead of overwriting.
+   `~/.config/walky/config.toml` from both machines.
 
-Then rebuild the portable store from the machine that has the most complete
-data (call it A):
+Then rebuild the portable store from the machine with the most complete data
+(call it A):
 
 1. Use a new ext4 drive (LUKS recommended) and mount it.
 2. On A, `walky init /run/media/$USER/<label>` (or **Set up a drive…** in the
    GUI). This creates a new `repo_id` and an empty history.
-3. Select A's sync folder and run a sync. A uploads its current files.
+3. A's window shows **Recovery required**. Open **Recover drive…**, check the
+   preview and merge. Recovery is additive: A's current files are uploaded and
+   nothing is deleted.
 
-Finally merge the second machine B, which may have changes that A does not have:
+Finally merge the second machine B:
 
 1. Attach the new drive to B and open **Set up a drive…**.
-2. Choose B's existing sync folder and press **Use this drive**. This updates
-   B's `repo_id` without touching its base manifest.
-3. Start the sync. If B has a previous base, Walky merges against it; if B never
-   synced, all local files are treated as new and pushed. Resolve any conflict
-   copies, then run `walky verify --full`.
+2. Choose B's existing sync folder and press **Use this drive**. Because the
+   drive belongs to a different store, Walky does not touch the config yet; it
+   shows **Recovery required**.
+3. Open **Recover drive…**, review the preview and merge.
+
+Recovery semantics:
+
+- files only on the machine are uploaded, files only in the store are
+  downloaded;
+- differing files with the same name keep both variants as conflict copies;
+- **nothing is deleted**, so deletions made before the loss may come back;
+- after the merge the config points at the new `repo_id`, the base is reset and
+  normal two-way sync resumes.
 
 The new store starts with a new history: old generations and the old drive trash
 are not recoverable. Keep a cold copy of the drive (unmounted `dd` or `rsync` to

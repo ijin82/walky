@@ -318,18 +318,20 @@ passes; `walky gc` removes garbage; no manual repair is needed.
 ### MT-35 Lost drive recovery
 
 1. Two machines, A and B, both synced once. Make a change on A and a different
-   change on B; leave B offline.
-2. Simulate the loss: keep the drive away (or use a copy and then discard it).
+   change on B; leave B offline. Make a deletion on A and a deletion on B.
+2. Simulate the loss: keep the old drive away (or use a copy and discard it).
 3. Back up both folders, `~/.local/state/walky` and `config.toml`.
-4. On A, initialize a new drive, configure A's folder and sync.
-5. On B, attach the new drive, choose "Use this drive" with B's existing folder
-   and sync.
+4. On A, initialize a new drive, then use "Recover drive…" in the window.
+5. On B, attach the new drive, choose "Use this drive" with B's existing folder,
+   then "Recover drive…".
 
-Expected: the new store contains A's current files plus B's unsynced changes;
-B keeps its local base and merges instead of overwriting; conflicts appear only
-for the same file changed on both sides. B attaches immediately after "Use this
-drive" without replugging. Old generations are absent by design; both folders
-match after the merge and `verify --full` passes.
+Expected: both machines show **Recovery required** instead of syncing silently.
+The preview reports upload/download/conflict counts and **zero deletions**.
+After the merge, A's current files and B's unsynced files are present on both
+machines; differing same-name files keep both variants as conflict copies; the
+config points at the new `repo_id`; a second sync runs normally. Files deleted
+before the loss may reappear — that is the documented additive behaviour. Old
+generations are absent.
 
 ### MT-34 Attach/detach loop
 

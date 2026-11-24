@@ -129,6 +129,23 @@ func (s *Service) UseStore(mountPoint string, repoPath string) (string, *dbus.Er
 	return id, nil
 }
 
+// PreviewRecovery summarizes the additive merge for a foreign store.
+func (s *Service) PreviewRecovery() (daemon.RecoveryPreview, *dbus.Error) {
+	p, err := s.d.PreviewRecovery(context.Background())
+	if err != nil {
+		return daemon.RecoveryPreview{}, dbus.MakeFailedError(err)
+	}
+	return p, nil
+}
+
+// StartRecovery starts the additive merge in the background.
+func (s *Service) StartRecovery() *dbus.Error {
+	if err := s.d.StartRecovery(); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
 // GetSettings returns the editable configuration.
 func (s *Service) GetSettings() (map[string]dbus.Variant, *dbus.Error) {
 	st := s.d.Settings()

@@ -33,11 +33,15 @@ const (
 	StateSyncing  = "syncing"
 	StatePaused   = "paused"
 	StateError    = "error"
+	// StateNeedsRecovery means the attached store has a different repo_id.
+	StateNeedsRecovery = "needs_recovery"
 )
 
 var (
 	// ErrNoDevice means no Walky drive is attached.
 	ErrNoDevice = errors.New("no walky drive is attached")
+	// ErrRecoveryNeeded blocks normal sync until recovery completes.
+	ErrRecoveryNeeded = errors.New("store recovery is required")
 	// ErrBusy means a sync is already running.
 	ErrBusy = errors.New("a sync is already running")
 )
@@ -158,16 +162,17 @@ type Daemon struct {
 	ejector Ejector
 	log     *slog.Logger
 
-	sleepWatch  func(context.Context) (<-chan bool, error)
-	checkFS     func(string) error
-	mounter     Mounter
-	mounting    bool
-	mounts      func() ([]device.Mount, error)
-	mountFilter func(string) bool
-	scanStores  func() ([]device.Device, error)
-	gcRunning   bool
-	trayItem    *tray.Tray
-	shutdown    context.CancelFunc
+	sleepWatch   func(context.Context) (<-chan bool, error)
+	checkFS      func(string) error
+	mounter      Mounter
+	mounting     bool
+	mounts       func() ([]device.Mount, error)
+	mountFilter  func(string) bool
+	scanStores   func() ([]device.Device, error)
+	gcRunning    bool
+	trayItem     *tray.Tray
+	shutdown     context.CancelFunc
+	recoveryRepo string
 
 	mu       sync.Mutex
 	emitter  Emitter
@@ -628,9 +633,17 @@ func (d *Daemon) attach(dev device.Device) {
 		return
 	}
 	if d.cfg.RepoID != "" && dev.Marker.RepoID != d.cfg.RepoID {
+		d.dev = &dev
+		d.lastErr = ""
+		d.state = StateNeedsRecovery
+		if d.recoveryRepo == "" {
+			d.recoveryRepo = d.cfg.RepoPath
+		}
 		d.mu.Unlock()
-		d.log.Warn("ignoring drive with unexpected repo_id",
+		d.log.Warn("drive belongs to a different store; recovery required",
 			"expected", d.cfg.RepoID, "actual", dev.Marker.RepoID, "root", dev.StoreRoot)
+		d.recordEvent(Event{Path: dev.StoreRoot, Op: "recovery", Result: "required", Time: time.Now().Unix()})
+		d.emitState()
 		return
 	}
 	d.dev = &dev
@@ -687,7 +700,7 @@ func (d *Daemon) stopSync() {
 
 func (d *Daemon) tryAutoSync() {
 	d.mu.Lock()
-	ready := d.cfg.AutoSync && !d.paused && d.dev != nil && !d.syncing
+	ready := d.cfg.AutoSync && !d.paused && d.dev != nil && !d.syncing && d.state == StateIdle
 	d.mu.Unlock()
 	if ready {
 		if err := d.startSync(); err != nil && !errors.Is(err, ErrBusy) {
@@ -725,6 +738,10 @@ func (d *Daemon) startSync() error {
 		d.mu.Unlock()
 		return ErrNoDevice
 	}
+	if d.state == StateNeedsRecovery {
+		d.mu.Unlock()
+		return ErrRecoveryNeeded
+	}
 	if d.syncing {
 		d.mu.Unlock()
 		return ErrBusy
@@ -756,6 +773,7 @@ func (d *Daemon) startSync() error {
 			Conflict:    cfg.Conflict,
 			BasePath:    cfg.BasePath,
 			TrashDir:    cfg.TrashDir,
+			StoreRepoID: dev.Marker.RepoID,
 		}, d.onProgress)
 		d.finishSync(ctx, dev, res, err)
 	}()
@@ -778,6 +796,9 @@ func (d *Daemon) finishSync(ctx context.Context, dev device.Device, res engine.R
 		} else {
 			d.state = StateIdle
 		}
+	case err != nil && errors.Is(err, engine.ErrDifferentStore):
+		d.state = StateNeedsRecovery
+		d.lastErr = "store recovery is required"
 	case err != nil:
 		d.state = StateError
 		d.lastErr = err.Error()
@@ -1014,13 +1035,32 @@ func (d *Daemon) InitStore(mountPoint, repoPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := setup.ConfigureRepo(d.cfg.ConfigPath, repoPath, res.RepoID); err != nil {
+	absRepo, err := filepath.Abs(repoPath)
+	if err != nil {
 		return res.RepoID, err
 	}
-	if err := d.ReloadConfig(); err != nil {
-		return res.RepoID, err
+	// A new store for a machine that already synced elsewhere needs recovery:
+	// keep the old config/base until the user confirms the additive merge.
+	if d.cfg.RepoID == "" {
+		if err := setup.ConfigureRepo(d.cfg.ConfigPath, absRepo, res.RepoID); err != nil {
+			return res.RepoID, err
+		}
+		if err := d.ReloadConfig(); err != nil {
+			return res.RepoID, err
+		}
+		d.reattach()
+	} else {
+		marker, err := store.ReadMarker(storeRoot)
+		if err != nil {
+			return res.RepoID, err
+		}
+		d.mu.Lock()
+		d.recoveryRepo = absRepo
+		d.mu.Unlock()
+		d.attach(device.Device{
+			MountPoint: mountPoint, StoreRoot: storeRoot, Label: target.Label, Marker: marker,
+		})
 	}
-	d.reattach()
 	d.recordEvent(Event{Path: storeRoot, Op: "init", Result: "ok", Time: time.Now().Unix()})
 	d.log.Info("store initialized", "root", storeRoot, "repo", repoPath)
 	return res.RepoID, nil
@@ -1042,7 +1082,27 @@ func (d *Daemon) UseStore(mountPoint, repoPath string) (string, error) {
 		if d.cfg.ConfigPath == "" {
 			return "", errors.New("config path is not set")
 		}
-		if err := setup.ConfigureRepo(d.cfg.ConfigPath, repoPath, drive.RepoID); err != nil {
+		absRepo, err := filepath.Abs(repoPath)
+		if err != nil {
+			return "", err
+		}
+		if d.cfg.RepoID != "" && d.cfg.RepoID != drive.RepoID {
+			// Different repository: do not touch the config until recovery is
+			// confirmed; attach it in the needs_recovery state.
+			marker, err := store.ReadMarker(drive.StoreRoot)
+			if err != nil {
+				return "", err
+			}
+			d.mu.Lock()
+			d.recoveryRepo = absRepo
+			d.mu.Unlock()
+			d.attach(device.Device{
+				MountPoint: drive.MountPoint, StoreRoot: drive.StoreRoot,
+				Label: drive.Label, Marker: marker,
+			})
+			return drive.RepoID, nil
+		}
+		if err := setup.ConfigureRepo(d.cfg.ConfigPath, absRepo, drive.RepoID); err != nil {
 			return "", err
 		}
 		if err := d.ReloadConfig(); err != nil {
@@ -1053,6 +1113,167 @@ func (d *Daemon) UseStore(mountPoint, repoPath string) (string, error) {
 		return drive.RepoID, nil
 	}
 	return "", errors.New("mount is not a removable ext4 filesystem")
+}
+
+// RecoveryPreview summarizes the additive merge before it starts.
+type RecoveryPreview struct {
+	Push      int
+	Pull      int
+	Conflicts int
+	Deletes   int
+	Total     int
+}
+
+func (d *Daemon) recoveryOptions(dev device.Device, repo string) engine.Options {
+	basePath := d.cfg.BasePath
+	indexPath := d.cfg.IndexPath
+	trashDir := d.cfg.TrashDir
+	if repo != d.cfg.RepoPath {
+		if p, err := state.BasePath(repo); err == nil {
+			basePath = p
+		}
+		if p, err := state.IndexPath(repo); err == nil {
+			indexPath = p
+		}
+	}
+	return engine.Options{
+		StoreRoot:   dev.StoreRoot,
+		RepoPath:    repo,
+		Excludes:    d.cfg.Excludes,
+		MaxFileSize: d.cfg.MaxFileSize,
+		Workers:     d.cfg.Workers,
+		IndexPath:   indexPath,
+		Machine:     d.cfg.Machine,
+		Mode:        engine.ModeTwoWay,
+		Conflict:    d.cfg.Conflict,
+		BasePath:    basePath,
+		TrashDir:    trashDir,
+		StoreRepoID: dev.Marker.RepoID,
+		Recover:     true,
+	}
+}
+
+// PreviewRecovery scans both sides and reports the additive merge plan.
+func (d *Daemon) PreviewRecovery(ctx context.Context) (RecoveryPreview, error) {
+	d.mu.Lock()
+	dev := d.dev
+	stateName := d.state
+	repo := d.recoveryRepo
+	if repo == "" {
+		repo = d.cfg.RepoPath
+	}
+	d.mu.Unlock()
+	if dev == nil || stateName != StateNeedsRecovery {
+		return RecoveryPreview{}, errors.New("no recovery is pending")
+	}
+	p, err := engine.Preview(ctx, d.recoveryOptions(*dev, repo))
+	if err != nil {
+		return RecoveryPreview{}, err
+	}
+	return RecoveryPreview{
+		Push: p.Push, Pull: p.Pull, Conflicts: p.Conflicts,
+		Deletes: p.Deletes, Total: p.Total,
+	}, nil
+}
+
+// StartRecovery runs the additive merge and, on success, adopts the new repo_id.
+func (d *Daemon) StartRecovery() error {
+	d.mu.Lock()
+	if d.dev == nil {
+		d.mu.Unlock()
+		return ErrNoDevice
+	}
+	if d.state != StateNeedsRecovery {
+		d.mu.Unlock()
+		return errors.New("no recovery is pending")
+	}
+	if d.syncing {
+		d.mu.Unlock()
+		return ErrBusy
+	}
+	dev := *d.dev
+	repo := d.recoveryRepo
+	if repo == "" {
+		repo = d.cfg.RepoPath
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	d.cancel = cancel
+	d.done = make(chan struct{})
+	d.syncing = true
+	d.state = StateSyncing
+	d.lastErr = ""
+	d.progress = engine.Progress{}
+	d.mu.Unlock()
+
+	d.emitState()
+	d.log.Info("recovery started", "root", dev.StoreRoot, "repo", repo)
+	opt := d.recoveryOptions(dev, repo)
+	go func() {
+		defer close(d.done)
+		res, err := d.runner.Run(ctx, opt, d.onProgress)
+		d.finishRecovery(ctx, dev, repo, res, err)
+	}()
+	return nil
+}
+
+func (d *Daemon) finishRecovery(ctx context.Context, dev device.Device, repo string, res engine.Result, err error) {
+	cancelled := ctx.Err() != nil
+	d.mu.Lock()
+	d.syncing = false
+	d.cancel = nil
+	d.progress = engine.Progress{}
+	switch {
+	case cancelled:
+		d.state = StateNeedsRecovery
+	case err != nil:
+		d.state = StateNeedsRecovery
+		d.lastErr = err.Error()
+	default:
+		d.dev = nil
+		d.state = StateIdle
+		d.gen = res.Gen
+		d.lastSync = time.Now()
+	}
+	d.mu.Unlock()
+
+	switch {
+	case cancelled:
+		d.log.Info("recovery aborted", "root", dev.StoreRoot)
+		d.recordEvent(Event{Path: dev.StoreRoot, Op: "recover", Result: "aborted", Time: time.Now().Unix()})
+		d.emitState()
+		return
+	case err != nil:
+		d.log.Error("recovery failed", "root", dev.StoreRoot, "err", err)
+		d.recordEvent(Event{Path: dev.StoreRoot, Op: "recover", Result: "error", Time: time.Now().Unix()})
+		d.emitState()
+		return
+	}
+
+	if err := setup.ConfigureRepo(d.cfg.ConfigPath, repo, dev.Marker.RepoID); err != nil {
+		d.mu.Lock()
+		d.dev = &dev
+		d.state = StateNeedsRecovery
+		d.lastErr = err.Error()
+		d.mu.Unlock()
+		d.emitState()
+		return
+	}
+	if err := d.ReloadConfig(); err != nil {
+		d.mu.Lock()
+		d.dev = &dev
+		d.state = StateNeedsRecovery
+		d.lastErr = err.Error()
+		d.mu.Unlock()
+		d.emitState()
+		return
+	}
+	d.mu.Lock()
+	d.recoveryRepo = ""
+	d.mu.Unlock()
+	d.reattach()
+	d.recordEvent(Event{Path: dev.StoreRoot, Op: "recover", Result: "ok", Size: res.UploadBytes, Time: time.Now().Unix()})
+	d.log.Info("recovery finished", "root", dev.StoreRoot, "generation", res.Gen)
+	d.emitState()
 }
 
 // Eject unmounts the current drive. It refuses while a sync is running.

@@ -88,8 +88,14 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 		parent = meta.Gen
 	}
 
+	if opt.StoreRepoID == "" {
+		opt.StoreRepoID = st.Marker().RepoID
+	}
 	base := loadBase(opt.BasePath)
-	plan := buildPlan(local, remote, base, conflictPolicy(opt.Conflict))
+	plan, err := planFor(local, remote, base, opt)
+	if err != nil {
+		return Result{}, err
+	}
 	report(progress, Progress{Phase: "plan", Total: len(plan)})
 
 	pullBytes, pushBytes := planSizes(plan)
@@ -202,7 +208,7 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 			return Result{}, err
 		}
 	}
-	if err := saveBase(opt.BasePath, commit.Gen, result, opt.Machine); err != nil {
+	if err := saveBase(opt.BasePath, commit.Gen, result, opt.Machine, opt.StoreRepoID); err != nil {
 		return Result{}, err
 	}
 	if opt.Machine != "" {
@@ -222,6 +228,109 @@ func twoWay(ctx context.Context, opt Options, progress func(Progress)) (Result, 
 		Pulled: pulled, Deleted: deleted, Conflicts: conflicts,
 		Skipped: res.Skipped,
 	}, nil
+}
+
+func planFor(local, remote, base *store.Manifest, opt Options) ([]planItem, error) {
+	baseRepo := loadBaseRepoID(opt.BasePath)
+	if opt.StoreRepoID != "" && baseRepo != "" && baseRepo != opt.StoreRepoID && !opt.Recover {
+		return nil, ErrDifferentStore
+	}
+	if opt.Recover {
+		return buildRecoveryPlan(local, remote), nil
+	}
+	return buildPlan(local, remote, base, conflictPolicy(opt.Conflict)), nil
+}
+
+// Preview scans and plans a run without writing anything.
+func Preview(ctx context.Context, opt Options) (PreviewResult, error) {
+	st, err := store.Open(opt.StoreRoot)
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	res, err := scanRepo(ctx, opt, func(Progress) {})
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	if opt.StoreRepoID == "" {
+		opt.StoreRepoID = st.Marker().RepoID
+	}
+	remote := &store.Manifest{}
+	latest, _, err := st.Latest()
+	switch {
+	case errors.Is(err, store.ErrNoHead):
+	case err != nil:
+		return PreviewResult{}, err
+	default:
+		remote = latest
+	}
+	plan, err := planFor(&res.Manifest, remote, loadBase(opt.BasePath), opt)
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	return summarizePlan(plan), nil
+}
+
+func summarizePlan(plan []planItem) PreviewResult {
+	var p PreviewResult
+	for _, item := range plan {
+		switch item.Kind {
+		case actPush:
+			p.Push++
+		case actPull:
+			p.Pull++
+		case actDeleteLocal, actDeleteRemote:
+			p.Deletes++
+		case actConflictRemote, actConflictLocal:
+			p.Conflicts++
+		}
+	}
+	p.Total = len(plan)
+	return p
+}
+
+// buildRecoveryPlan merges two trees without a shared ancestor. It never
+// deletes: local-only files are pushed, store-only files are pulled, and
+// differing files keep both variants as a conflict copy.
+func buildRecoveryPlan(local, remote *store.Manifest) []planItem {
+	lm := entryMap(local)
+	rm := entryMap(remote)
+	seen := make(map[string]struct{}, len(lm)+len(rm))
+	for p := range lm {
+		seen[p] = struct{}{}
+	}
+	for p := range rm {
+		seen[p] = struct{}{}
+	}
+	paths := make([]string, 0, len(seen))
+	for p := range seen {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	var plan []planItem
+	for _, p := range paths {
+		l, lok := lm[p]
+		s, sok := rm[p]
+		switch {
+		case lok && !sok:
+			plan = append(plan, planItem{Path: p, Kind: actPush, Local: l})
+		case !lok && sok:
+			plan = append(plan, planItem{Path: p, Kind: actPull, Remote: s})
+		case !lok && !sok:
+			continue
+		case sameEntry(optEntry{l, true}, optEntry{s, true}):
+			continue
+		case l.Type == store.TypeDir && s.Type == store.TypeDir:
+			continue
+		case l.Type == store.TypeDir || s.Type == store.TypeDir:
+			// A file/directory type conflict: keep the local variant and report
+			// it; there is no safe automatic replacement.
+			plan = append(plan, planItem{Path: p, Kind: actPush, Local: l})
+		default:
+			plan = append(plan, planItem{Path: p, Kind: actConflictRemote, Local: l, Remote: s})
+		}
+	}
+	return plan
 }
 
 func buildPlan(local, remote, base *store.Manifest, policy string) []planItem {
@@ -603,7 +712,24 @@ func loadBase(path string) *store.Manifest {
 	return m
 }
 
-func saveBase(path string, gen int64, m *store.Manifest, machine string) error {
+func loadBaseRepoID(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path + ".meta.json")
+	if err != nil {
+		return ""
+	}
+	var meta struct {
+		RepoID string `json:"repo_id"`
+	}
+	if json.Unmarshal(data, &meta) != nil {
+		return ""
+	}
+	return meta.RepoID
+}
+
+func saveBase(path string, gen int64, m *store.Manifest, machine, repoID string) error {
 	if path == "" {
 		return nil
 	}
@@ -614,6 +740,7 @@ func saveBase(path string, gen int64, m *store.Manifest, machine string) error {
 		"gen":      gen,
 		"machine":  machine,
 		"saved_at": time.Now().UTC(),
+		"repo_id":  repoID,
 	}
 	data, err := json.Marshal(meta)
 	if err != nil {

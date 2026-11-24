@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -344,5 +345,104 @@ func TestHeadChangedIsReported(t *testing.T) {
 	}}}
 	if _, err := st.Commit(m, store.CommitOptions{ExpectParent: &stale}); err == nil {
 		t.Fatal("commit with a stale parent succeeded")
+	}
+}
+
+func TestBuildRecoveryPlan(t *testing.T) {
+	e := func(path, hash string) store.Entry {
+		return store.Entry{Path: path, Type: store.TypeFile, Hash: hash, Size: 1, Mode: 0o644}
+	}
+	local := &store.Manifest{Entries: []store.Entry{
+		e("same.txt", "h1"), e("local-only.txt", "h2"), e("both.txt", "h3"),
+	}}
+	remote := &store.Manifest{Entries: []store.Entry{
+		e("same.txt", "h1"), e("remote-only.txt", "h4"), e("both.txt", "h5"),
+	}}
+	plan := buildRecoveryPlan(local, remote)
+	kinds := map[string]planKind{}
+	for _, item := range plan {
+		kinds[item.Path] = item.Kind
+	}
+	if kind := kinds["local-only.txt"]; kind != actPush {
+		t.Fatalf("local-only = %v", kind)
+	}
+	if kind := kinds["remote-only.txt"]; kind != actPull {
+		t.Fatalf("remote-only = %v", kind)
+	}
+	if kind := kinds["both.txt"]; kind != actConflictRemote {
+		t.Fatalf("both = %v", kind)
+	}
+	for _, item := range plan {
+		if item.Kind == actDeleteLocal || item.Kind == actDeleteRemote {
+			t.Fatalf("recovery plan contains a deletion: %+v", item)
+		}
+	}
+}
+
+func TestDifferentStoreNeedsRecovery(t *testing.T) {
+	env := newSyncEnv(t)
+	old, err := store.Open(env.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldID := old.Marker().RepoID
+	env.write(t, "A", "keep.txt", "keep")
+	env.write(t, "A", "gone.txt", "bye")
+	if _, err := Sync(context.Background(), Options{
+		StoreRoot: env.store, RepoPath: env.repo("A"), Mode: ModeTwoWay,
+		Conflict: ConflictCopy, BasePath: env.bases["A"], TrashDir: env.trash("A"),
+		Machine: "A", Hostname: "hostA", StoreRepoID: oldID,
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	newRoot := filepath.Join(env.root, "store-new")
+	newStore, err := store.Init(newRoot, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newID := newStore.Marker().RepoID
+	if newID == oldID {
+		t.Fatal("new store reused the old repo_id")
+	}
+	if err := os.Remove(filepath.Join(env.repo("A"), "gone.txt")); err != nil {
+		t.Fatal(err)
+	}
+	env.write(t, "A", "keep.txt", "keep-v2")
+
+	opt := Options{
+		StoreRoot: newRoot, RepoPath: env.repo("A"), Mode: ModeTwoWay,
+		Conflict: ConflictCopy, BasePath: env.bases["A"], TrashDir: env.trash("A"),
+		Machine: "A", Hostname: "hostA", StoreRepoID: newID,
+	}
+	if _, err := Sync(context.Background(), opt, nil); !errors.Is(err, ErrDifferentStore) {
+		t.Fatalf("normal sync error = %v, want ErrDifferentStore", err)
+	}
+
+	opt.Recover = true
+	preview, err := Preview(context.Background(), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Deletes != 0 || preview.Push < 1 || preview.Total == 0 {
+		t.Fatalf("preview = %+v", preview)
+	}
+	res, err := Sync(context.Background(), opt, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Deleted != 0 {
+		t.Fatalf("recovery deleted %d files", res.Deleted)
+	}
+	env.expect(t, "A", "keep.txt", "keep-v2")
+	if _, err := os.Stat(filepath.Join(env.repo("A"), "gone.txt")); !os.IsNotExist(err) {
+		t.Fatalf("recovery resurrected a locally deleted file: %v", err)
+	}
+	if got := loadBaseRepoID(env.bases["A"]); got != newID {
+		t.Fatalf("base repo_id = %q, want %q", got, newID)
+	}
+	opt.Recover = false
+	if _, err := Sync(context.Background(), opt, nil); err != nil {
+		t.Fatalf("normal sync after recovery: %v", err)
 	}
 }

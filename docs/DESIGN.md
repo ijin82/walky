@@ -657,3 +657,22 @@ stack Go+Vala. Still to settle before M5–M6:
 5. **LUKS: keyfile + passphrase or passphrase only?** A keyfile is more
    convenient (auto-unlock) but lives on the same machine; TPM
    (`systemd-cryptenroll`) is a compromise.
+
+## Recovery and repository identity
+
+The local base metadata (`base-*.meta.json`) records the `repo_id` of the store
+it came from. Normal two-way sync refuses to use a base from another store
+(`engine.ErrDifferentStore`); the daemon transitions to `needs_recovery` and the
+GUI shows a preview.
+
+Recovery is an additive merge without deletions:
+
+- local-only paths are pushed, store-only paths are pulled;
+- equal entries are kept;
+- differing files keep both variants as conflict copies;
+- directories and type clashes are kept locally.
+
+After a successful recovery the config adopts the new `repo_id`, the base is
+rewritten with that identity and normal sync resumes. The new store starts a
+fresh history; the old generations are not reconstructed. Keeping a cold copy of
+the drive is the only way to preserve history across drive loss.

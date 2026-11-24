@@ -19,6 +19,9 @@ namespace Walky {
         public signal void drives_updated(GLib.Variant drives);
         public signal void store_ready(string repo_id);
         public signal void store_failed(string message);
+        public signal void recovery_preview(int push, int pull, int conflicts, int deletes, int total);
+        public signal void recovery_started();
+        public signal void recovery_failed(string message);
 
         private bool daemon_start_attempted = false;
 
@@ -78,6 +81,14 @@ namespace Walky {
 
         public void use_store (string mount_point, string repo_path) {
             init_store_async.begin(mount_point, repo_path, false);
+        }
+
+        public void preview_recovery () {
+            preview_recovery_async.begin();
+        }
+
+        public void start_recovery () {
+            start_recovery_async.begin();
         }
 
         private async void fetch_status () {
@@ -194,6 +205,40 @@ namespace Walky {
                 store_ready(reply.get_child_value(0).get_string());
             } catch (Error e) {
                 store_failed(e.message);
+            }
+        }
+
+        private async void preview_recovery_async () {
+            if (proxy == null) {
+                recovery_failed("Walky daemon is not running");
+                return;
+            }
+            try {
+                var reply = yield proxy.call("PreviewRecovery", null,
+                    GLib.DBusCallFlags.NONE, 600000, null);
+                var body = reply.get_child_value(0);
+                recovery_preview(
+                    (int) body.get_child_value(0).get_int32(),
+                    (int) body.get_child_value(1).get_int32(),
+                    (int) body.get_child_value(2).get_int32(),
+                    (int) body.get_child_value(3).get_int32(),
+                    (int) body.get_child_value(4).get_int32());
+            } catch (Error e) {
+                recovery_failed(e.message);
+            }
+        }
+
+        private async void start_recovery_async () {
+            if (proxy == null) {
+                recovery_failed("Walky daemon is not running");
+                return;
+            }
+            try {
+                yield proxy.call("StartRecovery", null,
+                    GLib.DBusCallFlags.NONE, 15000, null);
+                recovery_started();
+            } catch (Error e) {
+                recovery_failed(e.message);
             }
         }
 

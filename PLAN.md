@@ -46,6 +46,10 @@ Version: `0.1.0` · updated: 2026-11-24
 - **Setup** — `walky init` and the GUI wizard share `internal/setup`; the wizard
   lists mounted removable ext4 drives, initializes `/WALKY`, writes `repo.path`
   and `repo_id`, and can adopt an existing store.
+- **Recovery** — the local base records its `repo_id`. A drive from a different
+  store enters `needs_recovery` instead of syncing silently; the GUI shows an
+  additive preview (no deletions, conflicts keep both), then adopts the new
+  `repo_id` and resets the base.
 - **Packaging surface** — `install.sh` (local/system/uninstall), systemd user
   unit, `.desktop`, icon in hicolor (SVG + PNG 16–256), `VERSION`.
 - **Policy** — Linux-only, ext4-only enforced at init/CLI/daemon; LUKS optional
@@ -218,7 +222,8 @@ every change and all of them before a release.
 - [ ] MT-33 hard power loss at several commit moments: `HEAD` old or complete,
       `verify` passes, GC cleans up
 - [ ] MT-34 attach/detach loop: no stuck lock, duplicate sync or leak
-- [ ] MT-35 lost drive recovery: rebuild from A, merge B's unsynced work
+- [ ] MT-35 lost drive recovery: rebuild from A, recover B's unsynced work
+      through the preview (no deletions)
 
 ## Open questions
 
@@ -232,6 +237,10 @@ every change and all of them before a release.
 
 ## Accepted decisions
 
+- A store with a different `repo_id` is never merged silently. It enters
+  `needs_recovery`; the user previews an additive merge (no deletions,
+  conflicts keep both), then the config adopts the new `repo_id` and the base
+  is reset. History starts fresh.
 - The drive is read by Linux only → ext4, every other filesystem rejected at
   init/open (LUKS-wrapped ext4 is fine once mounted).
 - Windows/macOS support is out of scope.
