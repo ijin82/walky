@@ -193,8 +193,10 @@ make install-local
 - Release notes are English, stored in `dist/GITHUB_RELEASE_vX.Y.Z.md` (`dist/`
   is gitignored), with sections: Highlights, Added, Changed, Fixed, Upgrade
   notes, Tests, Artifacts/SHA-256.
-- Tags and pushes only on explicit request; before tagging, `make check` must be
-  green and the tree clean.
+- When bumping `VERSION`, create the matching annotated git tag (`vX.Y.Z`, e.g.
+  `0.3.0` → `v0.3.0`) immediately after the version-bump commit, once
+  `make check` is green and the tree is clean. Pushing commits and tags still
+  happens only on explicit request.
 - Never promise unimplemented features in release notes; check milestone status
   against `PLAN.md`.
 
