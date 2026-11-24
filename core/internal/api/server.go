@@ -157,18 +157,20 @@ func (s *Service) GetSettings() (map[string]dbus.Variant, *dbus.Error) {
 		"trash_days":   dbus.MakeVariant(int32(st.Retention.TrashDays)),
 		"machine_days": dbus.MakeVariant(int32(st.Retention.MachineDays)),
 		"conflict":     dbus.MakeVariant(st.Conflict),
+		"poll_seconds": dbus.MakeVariant(int32(st.PollSeconds)),
 	}, nil
 }
 
 // SetSettings validates, persists and applies the editable configuration.
-func (s *Service) SetSettings(excludes []string, daily int32, weekly int32, monthly int32, trashDays int32, conflict string) *dbus.Error {
+func (s *Service) SetSettings(excludes []string, daily int32, weekly int32, monthly int32, trashDays int32, conflict string, pollSeconds int32) *dbus.Error {
 	err := s.d.UpdateSettings(daemon.Settings{
 		Excludes: excludes,
 		Retention: daemon.RetentionSettings{
 			Daily: int(daily), Weekly: int(weekly),
 			Monthly: int(monthly), TrashDays: int(trashDays),
 		},
-		Conflict: conflict,
+		Conflict:    conflict,
+		PollSeconds: int(pollSeconds),
 	})
 	if err != nil {
 		return dbus.MakeFailedError(err)

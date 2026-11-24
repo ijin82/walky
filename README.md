@@ -232,7 +232,8 @@ dependency trees, also Go `vendor/`), `target`, `build`, virtualenvs, caches and
 lock/temp files. They are edited in Settings; `**/vendor` can be removed if a
 project needs its vendored dependencies backed up.
 
-Settings (excludes, retention, conflict policy) are edited in the window and
+Settings (excludes, retention, conflict policy and the change-poll interval) are
+edited in the window and
 sent to the daemon, which validates, saves and applies them immediately; the UI
 never writes TOML itself. Note that saving rewrites the config file and drops
 comments.

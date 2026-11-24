@@ -11,6 +11,7 @@ namespace Walky {
         private Adw.SpinRow monthly_row;
         private Adw.SpinRow trash_row;
         private Adw.ComboRow conflict_row;
+        private Adw.SpinRow poll_row;
 
         public SettingsWindow (Gtk.Application app, Api api) {
             Object (
@@ -71,6 +72,11 @@ namespace Walky {
             model.append("Local wins");
             conflict_row.model = model;
             sync_group.add(conflict_row);
+
+            poll_row = new Adw.SpinRow(new Gtk.Adjustment(0, 0, 3600, 1, 10, 0), 1, 0);
+            poll_row.title = "Check for changes every";
+            poll_row.subtitle = "Seconds; 0 disables automatic checks while the drive is attached.";
+            sync_group.add(poll_row);
             page.add(sync_group);
 
             var actions = new Adw.PreferencesGroup();
@@ -100,6 +106,7 @@ namespace Walky {
             trash_row.value = int_value(dict, "trash_days");
             var conflict = string_value(dict, "conflict");
             conflict_row.selected = conflict_index(conflict);
+            poll_row.value = int_value(dict, "poll_seconds");
         }
 
         private void save_settings () {
@@ -116,7 +123,8 @@ namespace Walky {
                 (int) weekly_row.value,
                 (int) monthly_row.value,
                 (int) trash_row.value,
-                conflict_value(conflict_row.selected)
+                conflict_value(conflict_row.selected),
+                (int) poll_row.value
             );
         }
 

@@ -116,9 +116,10 @@ type RetentionSettings struct {
 
 // Settings is the editable subset of the configuration.
 type Settings struct {
-	Excludes  []string
-	Retention RetentionSettings
-	Conflict  string
+	Excludes    []string
+	Retention   RetentionSettings
+	Conflict    string
+	PollSeconds int
 }
 
 // Event is one recent activity entry exposed to clients.
@@ -218,9 +219,10 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 		scanStores: func() ([]device.Device, error) { return device.NewWatcher(0).Scan() },
 		state:      StateNoDevice,
 		settings: Settings{
-			Excludes:  append([]string(nil), cfg.Excludes...),
-			Retention: cfg.Retention,
-			Conflict:  cfg.Conflict,
+			Excludes:    append([]string(nil), cfg.Excludes...),
+			Retention:   cfg.Retention,
+			Conflict:    cfg.Conflict,
+			PollSeconds: int(cfg.PollInterval / time.Second),
 		},
 	}
 }
@@ -236,9 +238,10 @@ func (d *Daemon) Settings() Settings {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return Settings{
-		Excludes:  append([]string(nil), d.settings.Excludes...),
-		Retention: d.settings.Retention,
-		Conflict:  d.settings.Conflict,
+		Excludes:    append([]string(nil), d.settings.Excludes...),
+		Retention:   d.settings.Retention,
+		Conflict:    d.settings.Conflict,
+		PollSeconds: d.settings.PollSeconds,
 	}
 }
 
@@ -258,6 +261,7 @@ func (d *Daemon) UpdateSettings(s Settings) error {
 	cfg.Retention.Monthly = s.Retention.Monthly
 	cfg.Retention.TrashDays = s.Retention.TrashDays
 	cfg.Sync.Conflict = config.ConflictPolicy(s.Conflict)
+	cfg.Sync.PollSeconds = s.PollSeconds
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -322,6 +326,7 @@ func (d *Daemon) applyConfig(cfg config.Config) error {
 	d.cfg.Conflict = string(cfg.Sync.Conflict)
 	d.cfg.AutoSync = cfg.Device.AutoSync
 	d.cfg.AutoMount = cfg.Device.AutoMount
+	d.cfg.PollInterval = time.Duration(cfg.Sync.PollSeconds) * time.Second
 	d.cfg.DeviceLabel = cfg.Device.Label
 	if d.cfg.DeviceLabel == "" {
 		d.cfg.DeviceLabel = device.DefaultLabel
@@ -336,9 +341,10 @@ func (d *Daemon) applyConfig(cfg config.Config) error {
 		MachineDays: cfg.Retention.MachineDays,
 	}
 	d.settings = Settings{
-		Excludes:  append([]string(nil), cfg.Exclude.Patterns...),
-		Retention: d.cfg.Retention,
-		Conflict:  string(cfg.Sync.Conflict),
+		Excludes:    append([]string(nil), cfg.Exclude.Patterns...),
+		Retention:   d.cfg.Retention,
+		Conflict:    string(cfg.Sync.Conflict),
+		PollSeconds: cfg.Sync.PollSeconds,
 	}
 	d.mu.Unlock()
 	return nil
@@ -382,12 +388,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}()
 
-	var pollCh <-chan time.Time
-	if d.cfg.PollInterval > 0 {
-		ticker := time.NewTicker(d.cfg.PollInterval)
-		defer ticker.Stop()
-		pollCh = ticker.C
-	}
+	pollTicker := time.NewTicker(time.Second)
+	defer pollTicker.Stop()
+	lastPoll := time.Now()
 
 	var sleepCh <-chan bool
 	if d.sleepWatch != nil {
@@ -410,8 +413,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 			case device.Detached:
 				d.detach(ev.Device)
 			}
-		case <-pollCh:
-			d.tryAutoSync()
+		case <-pollTicker.C:
+			d.mu.Lock()
+			interval := d.cfg.PollInterval
+			d.mu.Unlock()
+			if interval > 0 && time.Since(lastPoll) >= interval {
+				lastPoll = time.Now()
+				d.tryAutoSync()
+			}
 		case sleeping, ok := <-sleepCh:
 			if !ok {
 				sleepCh = nil

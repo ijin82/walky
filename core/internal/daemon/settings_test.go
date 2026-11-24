@@ -35,9 +35,10 @@ func settingsDaemon(t *testing.T) (*Daemon, string) {
 func TestUpdateSettingsPersists(t *testing.T) {
 	d, cfgPath := settingsDaemon(t)
 	newSettings := Settings{
-		Excludes:  []string{"**/node_modules", "**/tmp"},
-		Retention: RetentionSettings{Daily: 3, Weekly: 2, Monthly: 1, TrashDays: 5},
-		Conflict:  string(config.ConflictNewest),
+		Excludes:    []string{"**/node_modules", "**/tmp"},
+		Retention:   RetentionSettings{Daily: 3, Weekly: 2, Monthly: 1, TrashDays: 5},
+		Conflict:    string(config.ConflictNewest),
+		PollSeconds: 45,
 	}
 	if err := d.UpdateSettings(newSettings); err != nil {
 		t.Fatalf("UpdateSettings: %v", err)
@@ -54,6 +55,9 @@ func TestUpdateSettingsPersists(t *testing.T) {
 	}
 	if loaded.Sync.Conflict != config.ConflictNewest {
 		t.Fatalf("conflict = %q", loaded.Sync.Conflict)
+	}
+	if loaded.Sync.PollSeconds != 45 {
+		t.Fatalf("poll_seconds = %d", loaded.Sync.PollSeconds)
 	}
 	if got := d.Settings(); got.Conflict != string(config.ConflictNewest) || got.Retention.Daily != 3 {
 		t.Fatalf("runtime settings = %+v", got)
