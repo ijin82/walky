@@ -147,7 +147,8 @@ comments.
 
 Closing the window hides it; the app stays alive and a tray icon remains in the
 top bar. The icon belongs to the daemon (StatusNotifierItem), so it is visible
-even when the window is closed and survives UI restarts. It needs the
+even when the window is closed and survives UI restarts. It uses the monochrome
+`walky-symbolic` icon so GNOME recolors it for light and dark panels. It needs the
 “AppIndicator and KStatusNotifierItem Support” GNOME extension (already present
 here). The menu offers Sync now, Pause/Resume, Open Walky, Verify integrity and
 Quit. The Background portal is no longer used.

@@ -106,13 +106,13 @@ func New(actions Actions) (*Tray, error) {
 			"Id":         {Value: "walky"},
 			"Title":      {Value: "Walky", Emit: prop.EmitTrue},
 			"Status":     {Value: "Active", Emit: prop.EmitTrue},
-			"IconName":   {Value: "walky", Emit: prop.EmitTrue},
+			"IconName":   {Value: "walky-symbolic", Emit: prop.EmitTrue},
 			"IconPixmap": {Value: []pixmap{}},
 			"Menu":       {Value: menuPath},
 			"ItemIsMenu": {Value: true},
 			"WindowId":   {Value: int32(0)},
 			"ToolTip": {
-				Value: toolTip{IconName: "walky", IconPixmap: []pixmap{},
+				Value: toolTip{IconName: "walky-symbolic", IconPixmap: []pixmap{},
 					Title: "Walky", Subtitle: "No drive"},
 				Emit: prop.EmitTrue,
 			},
@@ -177,7 +177,7 @@ func (t *Tray) refresh() {
 	if t.props != nil {
 		t.props.SetMust(sniIface, "Title", title)
 		t.props.SetMust(sniIface, "ToolTip", toolTip{
-			IconName: "walky", IconPixmap: []pixmap{}, Title: title, Subtitle: subtitle,
+			IconName: "walky-symbolic", IconPixmap: []pixmap{}, Title: title, Subtitle: subtitle,
 		})
 	}
 	_ = t.conn.Emit(sniPath, sniIface+".NewTitle")

@@ -2,6 +2,7 @@ BIN       := bin/walky
 UI_BIN    := bin/walky-ui
 APP_ID    := io.github.ijin.Walky
 ICON_SRC  := data/walky.svg
+ICON_SYMBOLIC := data/walky-symbolic.svg
 ICON_SIZES := 16 24 32 48 64 128 256
 GO_DIR    := core
 UI_DIR    := ui
@@ -72,6 +73,8 @@ ICON_DIR_LOCAL := $(HOME)/.local/share/icons/hicolor
 define install_icons
 	install -Dm644 $(ICON_SRC) $(1)/scalable/apps/walky.svg
 	install -Dm644 $(ICON_SRC) $(1)/scalable/apps/$(APP_ID).svg
+	install -Dm644 $(ICON_SYMBOLIC) $(1)/scalable/apps/walky-symbolic.svg
+	install -Dm644 $(ICON_SYMBOLIC) $(1)/scalable/apps/$(APP_ID)-symbolic.svg
 	@if command -v magick >/dev/null 2>&1; then \
 		for s in $(ICON_SIZES); do \
 			mkdir -p $(1)/$${s}x$${s}/apps; \
@@ -99,6 +102,7 @@ uninstall-local:
 	rm -f $(LOCAL_BIN)/walky $(LOCAL_BIN)/walky-ui
 	rm -f $(LOCAL_APPS)/walky.desktop $(LOCAL_APPS)/$(APP_ID).desktop
 	rm -f $(ICON_DIR_LOCAL)/scalable/apps/walky.svg $(ICON_DIR_LOCAL)/scalable/apps/$(APP_ID).svg
+	rm -f $(ICON_DIR_LOCAL)/scalable/apps/walky-symbolic.svg $(ICON_DIR_LOCAL)/scalable/apps/$(APP_ID)-symbolic.svg
 	@for s in $(ICON_SIZES); do rm -f $(ICON_DIR_LOCAL)/$${s}x$${s}/apps/walky.png $(ICON_DIR_LOCAL)/$${s}x$${s}/apps/$(APP_ID).png; done
 	rm -f $(HOME)/.config/systemd/user/walky.service
 	@systemctl --user daemon-reload 2>/dev/null || true
@@ -111,6 +115,7 @@ install-data:
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/walky $(DESTDIR)$(PREFIX)/bin/walky-ui
 	rm -f $(ICON_DIR_SYS)/scalable/apps/walky.svg $(ICON_DIR_SYS)/scalable/apps/$(APP_ID).svg
+	rm -f $(ICON_DIR_SYS)/scalable/apps/walky-symbolic.svg $(ICON_DIR_SYS)/scalable/apps/$(APP_ID)-symbolic.svg
 	@for s in $(ICON_SIZES); do rm -f $(ICON_DIR_SYS)/$${s}x$${s}/apps/walky.png $(ICON_DIR_SYS)/$${s}x$${s}/apps/$(APP_ID).png; done
 	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/user/walky.service
 	rm -f $(DESTDIR)/etc/sysctl.d/90-walky-inotify.conf
