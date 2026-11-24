@@ -836,8 +836,12 @@ func (d *Daemon) finishSync(ctx context.Context, dev device.Device, res engine.R
 		d.log.Error("sync failed", "root", dev.StoreRoot, "err", err)
 		d.recordEvent(Event{Path: dev.StoreRoot, Op: "sync", Result: "error", Time: time.Now().Unix()})
 	default:
-		d.log.Info("sync finished", "root", dev.StoreRoot, "generation", res.Gen, "changed", res.Changed)
-		d.recordEvent(Event{Path: dev.StoreRoot, Op: "sync", Result: "ok", Size: res.UploadBytes, Time: time.Now().Unix()})
+		if res.Changed {
+			d.log.Info("sync finished", "root", dev.StoreRoot, "generation", res.Gen)
+			d.recordEvent(Event{Path: dev.StoreRoot, Op: "sync", Result: "ok", Size: res.UploadBytes, Time: time.Now().Unix()})
+		} else {
+			d.log.Debug("sync finished with no changes", "root", dev.StoreRoot, "generation", res.Gen)
+		}
 	}
 	d.emitState()
 }
