@@ -58,8 +58,8 @@ clean:
 install: build
 	install -Dm755 $(BIN) $(DESTDIR)$(PREFIX)/bin/walky
 	install -Dm755 $(UI_BIN) $(DESTDIR)$(PREFIX)/bin/walky-ui
-	install -Dm644 data/walky.desktop $(DESTDIR)$(PREFIX)/share/applications/walky.desktop
-	install -Dm644 data/walky.desktop $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
+	install -Dm644 data/$(APP_ID).desktop $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/walky.desktop
 	$(call install_icons,$(ICON_DIR_SYS))
 
 # Per-user deployment without root: binaries and the desktop entry land in
@@ -88,8 +88,8 @@ endef
 install-local: build
 	install -Dm755 $(BIN) $(LOCAL_BIN)/walky
 	install -Dm755 $(UI_BIN) $(LOCAL_BIN)/walky-ui
-	install -Dm644 data/walky.desktop $(LOCAL_APPS)/walky.desktop
-	install -Dm644 data/walky.desktop $(LOCAL_APPS)/$(APP_ID).desktop
+	install -Dm644 data/$(APP_ID).desktop $(LOCAL_APPS)/$(APP_ID).desktop
+	rm -f $(LOCAL_APPS)/walky.desktop
 	$(call install_icons,$(ICON_DIR_LOCAL))
 	install -Dm644 data/walky.service $(HOME)/.config/systemd/user/walky.service
 	sed -i 's|/usr/bin/walky|%h/.local/bin/walky|' $(HOME)/.config/systemd/user/walky.service

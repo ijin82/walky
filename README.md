@@ -215,11 +215,15 @@ runs. Without a running daemon, `walky status` falls back to local information.
 ## Installation
 
 ```sh
-./install.sh              # build and install for the current user (~/.local)
+./install.sh              # interactive menu
+./install.sh local        # build and install for the current user (~/.local)
 ./install.sh system       # system-wide, requires root (/usr)
 ./install.sh uninstall    # remove the user installation
 ./install.sh uninstall-system
 ```
+
+Running `./install.sh` without arguments opens a menu with the same four
+operations (install for me, install system-wide, uninstall, uninstall system).
 
 The script builds both binaries and installs `walky`, `walky-ui`, the desktop
 entry and a systemd user unit. The local mode needs no root and rewrites the unit
