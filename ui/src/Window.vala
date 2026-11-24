@@ -24,6 +24,8 @@ namespace Walky {
         private Adw.ToastOverlay toast_overlay;
         private string last_state = "";
         private int64 last_generation = -1;
+        private bool manual_sync_pending = false;
+        private int64 manual_sync_gen = -1;
 
         public Window (Gtk.Application app, Api api) {
             Object (
@@ -46,6 +48,8 @@ namespace Walky {
             api.verify_failed.connect(on_verify_failed);
             api.repo_path_changed.connect(on_repo_path_changed);
             api.repo_path_failed.connect(on_repo_path_failed);
+            api.sync_finished.connect(on_sync_finished);
+            api.sync_failed.connect(on_sync_failed);
 
             GLib.Timeout.add_seconds(1, () => {
                 api.refresh();
@@ -153,6 +157,7 @@ namespace Walky {
             folder_row.subtitle = "Not configured";
             change_folder_button = new Gtk.Button.with_label("Change…");
             change_folder_button.valign = Gtk.Align.CENTER;
+            change_folder_button.tooltip_text = "Choose a different local folder to synchronize with the drive";
             change_folder_button.clicked.connect(() => choose_sync_folder.begin());
             folder_row.add_suffix(change_folder_button);
             group.add(folder_row);
@@ -205,23 +210,28 @@ namespace Walky {
 
             var sync_button = new Gtk.Button.with_label("Sync now");
             sync_button.add_css_class("suggested-action");
-            sync_button.clicked.connect(() => api.sync_now());
+            sync_button.tooltip_text = "Check the sync folder and drive for changes right now";
+            sync_button.clicked.connect(trigger_sync);
             box.append(sync_button);
 
             pause_button = new Gtk.Button.with_label("Pause");
+            pause_button.tooltip_text = "Pause or resume automatic background synchronization";
             pause_button.clicked.connect(toggle_pause);
             box.append(pause_button);
 
             var eject_button = new Gtk.Button.with_label("Eject");
+            eject_button.tooltip_text = "Finish any active sync, safely unmount and power off the drive";
             eject_button.clicked.connect(() => api.eject());
             box.append(eject_button);
 
             var setup_button = new Gtk.Button.with_label("Set up a drive");
+            setup_button.tooltip_text = "Initialize a new Walky drive or connect an existing one";
             setup_button.clicked.connect(open_setup);
             box.append(setup_button);
 
             recovery_button = new Gtk.Button.with_label("Recover drive…");
             recovery_button.add_css_class("destructive-action");
+            recovery_button.tooltip_text = "Merge local files with a different Walky store without deletions";
             recovery_button.visible = false;
             recovery_button.clicked.connect(open_recovery);
             box.append(recovery_button);
@@ -289,6 +299,23 @@ namespace Walky {
         private void on_repo_path_changed (string repo_path) {
             folder_row.subtitle = repo_path;
             toast_overlay.add_toast(new Adw.Toast("Sync folder changed"));
+        }
+
+        private void trigger_sync () {
+            manual_sync_pending = true;
+            manual_sync_gen = last_generation;
+            title_widget.subtitle = "Checking for changes…";
+            toast_overlay.add_toast(new Adw.Toast("Checking for changes…"));
+            api.sync_now();
+        }
+
+        private void on_sync_finished () {
+            // Final message is shown once the refreshed status arrives in on_status.
+        }
+
+        private void on_sync_failed (string message) {
+            manual_sync_pending = false;
+            toast_overlay.add_toast(new Adw.Toast("Sync failed: " + message));
         }
 
         private void on_repo_path_failed (string message) {
@@ -368,6 +395,16 @@ namespace Walky {
                 }
             } else if (state == "error" && last_state != "error") {
                 send_notification("Sync failed", error);
+            }
+            if (manual_sync_pending && state != "syncing") {
+                manual_sync_pending = false;
+                if (state == "error") {
+                    toast_overlay.add_toast(new Adw.Toast("Sync failed: " + error));
+                } else if (generation == manual_sync_gen) {
+                    toast_overlay.add_toast(new Adw.Toast("Already up to date — nothing to sync"));
+                } else {
+                    toast_overlay.add_toast(new Adw.Toast("Synced (generation %s)".printf(generation.to_string())));
+                }
             }
             last_state = state;
             last_generation = generation;

@@ -46,8 +46,11 @@ namespace Walky {
             fetch_events.begin();
         }
 
+        public signal void sync_finished();
+        public signal void sync_failed(string message);
+
         public void sync_now () {
-            invoke.begin("SyncNow", new GLib.Variant("(b)", false));
+            sync_now_async.begin();
         }
 
         public void pause (bool paused) {
@@ -215,6 +218,26 @@ namespace Walky {
                 store_ready(reply.get_child_value(0).get_string());
             } catch (Error e) {
                 store_failed(e.message);
+            }
+        }
+
+        private async void sync_now_async () {
+            if (proxy == null) {
+                sync_failed("Daemon unavailable");
+                return;
+            }
+            try {
+                yield proxy.call(
+                    "SyncNow",
+                    new GLib.Variant("(b)", true),
+                    GLib.DBusCallFlags.NONE,
+                    -1,
+                    null
+                );
+                sync_finished();
+                refresh();
+            } catch (Error e) {
+                sync_failed(e.message);
             }
         }
 
