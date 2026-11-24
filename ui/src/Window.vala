@@ -94,7 +94,6 @@ namespace Walky {
             var menu = new GLib.Menu();
             menu.append("Sync now", "win.sync");
             menu.append("Pause / resume", "win.pause");
-            menu.append("Verify integrity", "win.verify");
             menu.append("Eject drive", "win.eject");
             menu.append("Set up a drive…", "win.setup");
             menu.append("Recover drive…", "win.recover");
