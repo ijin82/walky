@@ -58,8 +58,11 @@ namespace Walky {
             invoke.begin("Eject", null);
         }
 
+        public signal void verify_finished(string summary);
+        public signal void verify_failed(string message);
+
         public void verify () {
-            invoke.begin("Verify", new GLib.Variant("(b)", false));
+            verify_async.begin();
         }
 
         public void fetch_settings () {
@@ -205,6 +208,21 @@ namespace Walky {
                 store_ready(reply.get_child_value(0).get_string());
             } catch (Error e) {
                 store_failed(e.message);
+            }
+        }
+
+        private async void verify_async () {
+            if (proxy == null) {
+                verify_failed("Walky daemon is not running");
+                return;
+            }
+            try {
+                var reply = yield proxy.call("Verify",
+                    new GLib.Variant("(b)", false),
+                    GLib.DBusCallFlags.NONE, 120000, null);
+                verify_finished(reply.get_child_value(0).get_string());
+            } catch (Error e) {
+                verify_failed(e.message);
             }
         }
 

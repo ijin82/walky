@@ -19,6 +19,7 @@ namespace Walky {
         private InitWindow? init_window;
         private RecoveryWindow? recovery_window;
         private Gtk.Button recovery_button;
+        private Adw.ToastOverlay toast_overlay;
         private string last_state = "";
 
         public Window (Gtk.Application app, Api api) {
@@ -38,6 +39,8 @@ namespace Walky {
             api.status_updated.connect(on_status);
             api.events_updated.connect(on_events);
             api.unavailable.connect(on_unavailable);
+            api.verify_finished.connect(on_verify_finished);
+            api.verify_failed.connect(on_verify_failed);
 
             GLib.Timeout.add_seconds(1, () => {
                 api.refresh();
@@ -73,9 +76,12 @@ namespace Walky {
             scroll.set_child(content);
             scroll.vexpand = true;
 
+            toast_overlay = new Adw.ToastOverlay();
+            toast_overlay.set_child(scroll);
+
             var view = new Adw.ToolbarView();
             view.add_top_bar(header);
-            view.set_content(scroll);
+            view.set_content(toast_overlay);
             set_content(view);
         }
 
@@ -106,7 +112,7 @@ namespace Walky {
             actions.add_action(pause_action);
 
             var verify_action = new GLib.SimpleAction("verify", null);
-            verify_action.activate.connect(() => api.verify());
+            verify_action.activate.connect(run_verify);
             actions.add_action(verify_action);
 
             var eject_action = new GLib.SimpleAction("eject", null);
@@ -214,6 +220,21 @@ namespace Walky {
                 init_window = new InitWindow(application as Gtk.Application, api);
             }
             init_window.present();
+        }
+
+        private void run_verify () {
+            toast_overlay.add_toast(new Adw.Toast("Checking the store integrity…"));
+            api.verify();
+        }
+
+        private void on_verify_finished (string summary) {
+            toast_overlay.add_toast(new Adw.Toast("Integrity OK: " + summary));
+            send_notification("Integrity check passed", summary);
+        }
+
+        private void on_verify_failed (string message) {
+            toast_overlay.add_toast(new Adw.Toast("Integrity check failed: " + message));
+            send_notification("Integrity check failed", message);
         }
 
         private void open_recovery () {

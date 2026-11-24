@@ -1299,9 +1299,13 @@ func (d *Daemon) Eject(ctx context.Context) error {
 func (d *Daemon) Verify(full bool) (string, error) {
 	d.mu.Lock()
 	dev := d.dev
+	syncing := d.syncing
 	d.mu.Unlock()
 	if dev == nil {
 		return "", ErrNoDevice
+	}
+	if syncing {
+		return "", ErrBusy
 	}
 	st, err := store.Open(dev.StoreRoot)
 	if err != nil {
