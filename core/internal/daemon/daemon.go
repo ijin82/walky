@@ -133,21 +133,23 @@ type Event struct {
 
 // Status is a snapshot of daemon state.
 type Status struct {
-	State         string
-	Device        string
-	StoreRoot     string
-	MountPoint    string
-	RepoID        string
-	LastSync      int64
-	Generation    int64
-	Pending       int
-	Conflicts     int
-	FreeBytes     int64
-	Paused        bool
-	ProgressDone  int
-	ProgressTotal int
-	ProgressBytes int64
-	LastError     string
+	State           string
+	Device          string
+	StoreRoot       string
+	MountPoint      string
+	RepoID          string
+	LastSync        int64
+	Generation      int64
+	Pending         int
+	Conflicts       int
+	FreeBytes       int64
+	Encrypted       bool
+	EncryptionKnown bool
+	Paused          bool
+	ProgressDone    int
+	ProgressTotal   int
+	ProgressBytes   int64
+	LastError       string
 }
 
 type runnerFunc func(context.Context, engine.Options, func(engine.Progress)) (engine.Result, error)
@@ -915,6 +917,7 @@ func (d *Daemon) Status() Status {
 		st.MountPoint = d.dev.MountPoint
 		st.RepoID = d.dev.Marker.RepoID
 		st.FreeBytes = freeBytes(d.dev.StoreRoot)
+		st.Encrypted, st.EncryptionKnown = device.EncryptionStatus(d.dev.StoreRoot)
 	}
 	return st
 }

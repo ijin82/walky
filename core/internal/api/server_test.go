@@ -19,15 +19,17 @@ import (
 
 func TestStatusMap(t *testing.T) {
 	m := statusMap(daemon.Status{
-		State:         daemon.StateIdle,
-		Device:        "WALKY",
-		StoreRoot:     "/run/media/u/WALKY/WALKY",
-		Generation:    7,
-		LastSync:      1700000000,
-		FreeBytes:     1 << 30,
-		ProgressDone:  3,
-		ProgressTotal: 10,
-		Paused:        true,
+		State:           daemon.StateIdle,
+		Device:          "WALKY",
+		StoreRoot:       "/run/media/u/WALKY/WALKY",
+		Generation:      7,
+		LastSync:        1700000000,
+		FreeBytes:       1 << 30,
+		Encrypted:       true,
+		EncryptionKnown: true,
+		ProgressDone:    3,
+		ProgressTotal:   10,
+		Paused:          true,
 	})
 	if got := m["state"].Value(); got != daemon.StateIdle {
 		t.Fatalf("state = %v", got)
@@ -43,6 +45,12 @@ func TestStatusMap(t *testing.T) {
 	}
 	if got := m["free_bytes"].Value(); got != int64(1<<30) {
 		t.Fatalf("free_bytes = %v", got)
+	}
+	if got := m["encrypted"].Value(); got != true {
+		t.Fatalf("encrypted = %v", got)
+	}
+	if got := m["encryption_known"].Value(); got != true {
+		t.Fatalf("encryption_known = %v", got)
 	}
 }
 

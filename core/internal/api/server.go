@@ -250,21 +250,23 @@ func (s *Service) emit(member string, args ...any) {
 
 func statusMap(st daemon.Status) map[string]dbus.Variant {
 	m := map[string]dbus.Variant{
-		"state":          dbus.MakeVariant(st.State),
-		"device":         dbus.MakeVariant(st.Device),
-		"store_root":     dbus.MakeVariant(st.StoreRoot),
-		"mount_point":    dbus.MakeVariant(st.MountPoint),
-		"repo_id":        dbus.MakeVariant(st.RepoID),
-		"last_sync":      dbus.MakeVariant(st.LastSync),
-		"generation":     dbus.MakeVariant(st.Generation),
-		"pending":        dbus.MakeVariant(uint32(st.Pending)),
-		"conflicts":      dbus.MakeVariant(uint32(st.Conflicts)),
-		"free_bytes":     dbus.MakeVariant(st.FreeBytes),
-		"paused":         dbus.MakeVariant(st.Paused),
-		"progress_done":  dbus.MakeVariant(uint32(st.ProgressDone)),
-		"progress_total": dbus.MakeVariant(uint32(st.ProgressTotal)),
-		"progress_bytes": dbus.MakeVariant(st.ProgressBytes),
-		"last_error":     dbus.MakeVariant(st.LastError),
+		"state":            dbus.MakeVariant(st.State),
+		"device":           dbus.MakeVariant(st.Device),
+		"store_root":       dbus.MakeVariant(st.StoreRoot),
+		"mount_point":      dbus.MakeVariant(st.MountPoint),
+		"repo_id":          dbus.MakeVariant(st.RepoID),
+		"last_sync":        dbus.MakeVariant(st.LastSync),
+		"generation":       dbus.MakeVariant(st.Generation),
+		"pending":          dbus.MakeVariant(uint32(st.Pending)),
+		"conflicts":        dbus.MakeVariant(uint32(st.Conflicts)),
+		"free_bytes":       dbus.MakeVariant(st.FreeBytes),
+		"encrypted":        dbus.MakeVariant(st.Encrypted),
+		"encryption_known": dbus.MakeVariant(st.EncryptionKnown),
+		"paused":           dbus.MakeVariant(st.Paused),
+		"progress_done":    dbus.MakeVariant(uint32(st.ProgressDone)),
+		"progress_total":   dbus.MakeVariant(uint32(st.ProgressTotal)),
+		"progress_bytes":   dbus.MakeVariant(st.ProgressBytes),
+		"last_error":       dbus.MakeVariant(st.LastError),
 	}
 	return m
 }

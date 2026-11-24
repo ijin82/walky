@@ -173,6 +173,13 @@ func printRemoteStatus(st map[string]any, asJSON bool) error {
 	if v, _ := st["store_root"].(string); v != "" {
 		fmt.Printf("store:      %s\n", v)
 	}
+	if known, _ := st["encryption_known"].(bool); known {
+		if enc, _ := st["encrypted"].(bool); enc {
+			fmt.Println("encryption: LUKS")
+		} else {
+			fmt.Println("encryption: none (LUKS2 recommended)")
+		}
+	}
 	if v, ok := st["generation"].(int64); ok && v > 0 {
 		fmt.Printf("generation: %d\n", v)
 	}

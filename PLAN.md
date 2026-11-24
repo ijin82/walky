@@ -109,7 +109,7 @@ hardware/session checks remain.
 - [x] Non-blocking warning from `walky init` when the ext4 mount is not on
       dm-crypt: “LUKS2 is strongly recommended”. Never refuses, never prompts;
       detection walks mountinfo and sysfs slaves.
-- [ ] Expose the encryption state in `walky status` and the UI (nice-to-have).
+- [x] Expose the encryption state in `walky status` and the UI (nice-to-have).
 
 ### P3 — M8 hardening (optional)
 

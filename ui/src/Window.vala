@@ -262,7 +262,11 @@ namespace Walky {
             var device = string_value(status, "device");
             var root = string_value(status, "store_root");
             if (root != "") {
-                device_row.subtitle = device != "" ? "%s · %s".printf(device, root) : root;
+                var text = device != "" ? "%s · %s".printf(device, root) : root;
+                if (bool_value(status, "encryption_known")) {
+                    text += bool_value(status, "encrypted") ? " · LUKS" : " · unencrypted";
+                }
+                device_row.subtitle = text;
             } else {
                 device_row.subtitle = "No drive";
             }
