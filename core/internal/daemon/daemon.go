@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -449,6 +450,10 @@ func (d *Daemon) startTray(ctx context.Context) {
 }
 
 func (d *Daemon) quit() {
+	d.log.Info("quit requested from the tray")
+	// "Quit Walky" should leave neither a stray daemon nor a window that
+	// reports a missing daemon.
+	_ = exec.Command("pkill", "-x", "walky-ui").Run()
 	d.mu.Lock()
 	cancel := d.shutdown
 	d.mu.Unlock()

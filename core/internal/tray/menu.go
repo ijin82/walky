@@ -87,7 +87,7 @@ func (m *menu) layout(parentID int32, depth int32) (layoutItem, bool) {
 		{ID: idOpen, Props: actionProps("Open Walky")},
 		{ID: idVerify, Props: actionProps("Verify integrity")},
 		{ID: idSep, Props: map[string]dbus.Variant{"type": dbus.MakeVariant("separator")}},
-		{ID: idQuit, Props: actionProps("Quit")},
+		{ID: idQuit, Props: actionProps("Quit Walky")},
 	}
 	children := make([]dbus.Variant, 0, len(items))
 	for _, item := range items {
