@@ -87,6 +87,39 @@ desktop asks for the passphrase and the ext4 filesystem appears afterwards.
 `walky init` warns when the filesystem is not inside LUKS; it is advisory and
 never blocks initialization.
 
+### Using the drive as normal storage
+
+The drive is a normal ext4 filesystem (inside LUKS). Browse and copy files with
+Files/Nautilus, `cp`, or any other tool. Walky owns only the `/WALKY` directory:
+do not move, edit or delete its files by hand. Everything else on the drive is
+untouched by synchronization and is not part of the history.
+
+To use the drive without starting a sync, pause the daemon first (window,
+tray, or `walky pause`), then mount and copy files. The next sync still only
+looks at the configured local folder and `/WALKY`.
+
+### Safe removal
+
+The preferred way is the Walky eject action (window, tray, or CLI). It commits
+any running sync, unmounts the filesystem and powers the drive off:
+
+```sh
+walky eject
+```
+
+GNOME Files' eject button does the same. By hand:
+
+```sh
+# find the mapper name with lsblk, then:
+udisksctl unmount -b /dev/mapper/luks-<uuid>
+udisksctl lock -b /dev/sdd1        # optional, closes the LUKS mapping
+udisksctl power-off -b /dev/sdd    # optional, powers the drive off
+```
+
+After the filesystem is unmounted it is safe to unplug the drive. Stop the
+daemon first only if it is not responding to eject:
+`systemctl --user stop walky.service`.
+
 ## Quick start (manual, no daemon)
 
 ```sh
