@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Walky: offline sync drive">
+  <title>Walky</title>
+  <desc>A USB flash drive with two opposing arrows, representing the offline sync store</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a9eff"/>
+      <stop offset="1" stop-color="#1c71d8"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e6edf7"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f9fc"/>
+      <stop offset="1" stop-color="#c3cad6"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#0b2a52" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="104" fill="url(#bg)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="196" y="96" width="120" height="84" rx="18" fill="url(#metal)"/>
+    <rect x="216" y="118" width="20" height="40" rx="6" fill="#8d99ad"/>
+    <rect x="276" y="118" width="20" height="40" rx="6" fill="#8d99ad"/>
+    <rect x="168" y="164" width="176" height="272" rx="40" fill="url(#body)"/>
+  </g>
+
+  <g fill="none" stroke="#1c71d8" stroke-width="18" stroke-linecap="round">
+    <path d="M208 244h84"/>
+    <path d="M304 316h-84"/>
+  </g>
+  <path d="M292 224l36 20-36 20z" fill="#1c71d8"/>
+  <path d="M220 296l-36 20 36 20z" fill="#1c71d8"/>
+
+  <circle cx="256" cy="388" r="11" fill="#2ec27e"/>
+</svg>

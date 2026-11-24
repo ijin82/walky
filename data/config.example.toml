@@ -32,6 +32,5 @@ monthly = 6
 trash_days = 30
 
 [device]
-require_luks = true
 auto_sync = true
 eject_after_sync = false

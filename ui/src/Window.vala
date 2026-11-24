@@ -15,6 +15,7 @@ namespace Walky {
         private Gtk.Label progress_label;
         private Gtk.ListBox events_list;
         private Gtk.Button pause_button;
+        private SettingsWindow? settings_window;
         private string last_state = "";
 
         public Window (Gtk.Application app, Api api) {
@@ -26,6 +27,10 @@ namespace Walky {
             );
             this.api = api;
             build_ui();
+            close_request.connect(() => {
+                hide();
+                return true;
+            });
 
             api.status_updated.connect(on_status);
             api.events_updated.connect(on_events);
@@ -75,6 +80,7 @@ namespace Walky {
             menu.append("Pause / resume", "win.pause");
             menu.append("Verify integrity", "win.verify");
             menu.append("Eject drive", "win.eject");
+            menu.append("Settings…", "win.settings");
             menu.append("Quit", "app.quit");
 
             var button = new Gtk.MenuButton();
@@ -99,6 +105,10 @@ namespace Walky {
             var eject_action = new GLib.SimpleAction("eject", null);
             eject_action.activate.connect(() => api.eject());
             actions.add_action(eject_action);
+
+            var settings_action = new GLib.SimpleAction("settings", null);
+            settings_action.activate.connect(open_settings);
+            actions.add_action(settings_action);
 
             insert_action_group("win", actions);
             return button;
@@ -172,6 +182,13 @@ namespace Walky {
             eject_button.clicked.connect(() => api.eject());
             box.append(eject_button);
             return box;
+        }
+
+        private void open_settings () {
+            if (settings_window == null) {
+                settings_window = new SettingsWindow(application as Gtk.Application, api);
+            }
+            settings_window.present();
         }
 
         private void toggle_pause () {

@@ -102,6 +102,43 @@ func (s *Service) GetStatus() (map[string]dbus.Variant, *dbus.Error) {
 	return statusMap(s.d.Status()), nil
 }
 
+// GetSettings returns the editable configuration.
+func (s *Service) GetSettings() (map[string]dbus.Variant, *dbus.Error) {
+	st := s.d.Settings()
+	return map[string]dbus.Variant{
+		"excludes":   dbus.MakeVariant(st.Excludes),
+		"daily":      dbus.MakeVariant(int32(st.Retention.Daily)),
+		"weekly":     dbus.MakeVariant(int32(st.Retention.Weekly)),
+		"monthly":    dbus.MakeVariant(int32(st.Retention.Monthly)),
+		"trash_days": dbus.MakeVariant(int32(st.Retention.TrashDays)),
+		"conflict":   dbus.MakeVariant(st.Conflict),
+	}, nil
+}
+
+// SetSettings validates, persists and applies the editable configuration.
+func (s *Service) SetSettings(excludes []string, daily int32, weekly int32, monthly int32, trashDays int32, conflict string) *dbus.Error {
+	err := s.d.UpdateSettings(daemon.Settings{
+		Excludes: excludes,
+		Retention: daemon.RetentionSettings{
+			Daily: int(daily), Weekly: int(weekly),
+			Monthly: int(monthly), TrashDays: int(trashDays),
+		},
+		Conflict: conflict,
+	})
+	if err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+// ReloadConfig re-reads the configuration file.
+func (s *Service) ReloadConfig() *dbus.Error {
+	if err := s.d.ReloadConfig(); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
 // GetEvents returns the most recent activity, newest first.
 func (s *Service) GetEvents(limit uint32) ([]daemon.Event, *dbus.Error) {
 	return s.d.Events(int(limit)), nil

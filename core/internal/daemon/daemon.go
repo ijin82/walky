@@ -14,8 +14,10 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"walky/internal/config"
 	"walky/internal/device"
 	"walky/internal/engine"
+	"walky/internal/state"
 	"walky/internal/store"
 )
 
@@ -75,6 +77,23 @@ type Config struct {
 	Conflict      string
 	BasePath      string
 	TrashDir      string
+	ConfigPath    string
+	Retention     RetentionSettings
+}
+
+// RetentionSettings mirrors the [retention] section for the UI.
+type RetentionSettings struct {
+	Daily     int
+	Weekly    int
+	Monthly   int
+	TrashDays int
+}
+
+// Settings is the editable subset of the configuration.
+type Settings struct {
+	Excludes  []string
+	Retention RetentionSettings
+	Conflict  string
 }
 
 // Event is one recent activity entry exposed to clients.
@@ -135,6 +154,7 @@ type Daemon struct {
 	done     chan struct{}
 	lastErr  string
 	progress engine.Progress
+	settings Settings
 }
 
 // New creates a daemon with production dependencies.
@@ -154,6 +174,11 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 		sleepWatch: device.WatchSleep,
 		checkFS:    store.CheckFilesystem,
 		state:      StateNoDevice,
+		settings: Settings{
+			Excludes:  append([]string(nil), cfg.Excludes...),
+			Retention: cfg.Retention,
+			Conflict:  cfg.Conflict,
+		},
 	}
 }
 
@@ -161,6 +186,104 @@ type ejectorFunc func(context.Context, string) error
 
 func (f ejectorFunc) Eject(ctx context.Context, mountPoint string) error {
 	return f(ctx, mountPoint)
+}
+
+// Settings returns the editable configuration.
+func (d *Daemon) Settings() Settings {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return Settings{
+		Excludes:  append([]string(nil), d.settings.Excludes...),
+		Retention: d.settings.Retention,
+		Conflict:  d.settings.Conflict,
+	}
+}
+
+// UpdateSettings validates, persists and applies new settings. A change of the
+// repository path is rejected because it would invalidate the local base.
+func (d *Daemon) UpdateSettings(s Settings) error {
+	if d.cfg.ConfigPath == "" {
+		return errors.New("config path is not set")
+	}
+	cfg, err := config.Load(d.cfg.ConfigPath)
+	if err != nil {
+		return err
+	}
+	cfg.Exclude.Patterns = append([]string(nil), s.Excludes...)
+	cfg.Retention.Daily = s.Retention.Daily
+	cfg.Retention.Weekly = s.Retention.Weekly
+	cfg.Retention.Monthly = s.Retention.Monthly
+	cfg.Retention.TrashDays = s.Retention.TrashDays
+	cfg.Sync.Conflict = config.ConflictPolicy(s.Conflict)
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := d.applyConfig(cfg); err != nil {
+		return err
+	}
+	return config.Save(d.cfg.ConfigPath, cfg)
+}
+
+// ReloadConfig re-reads the configuration file and applies it.
+func (d *Daemon) ReloadConfig() error {
+	if d.cfg.ConfigPath == "" {
+		return errors.New("config path is not set")
+	}
+	cfg, err := config.Load(d.cfg.ConfigPath)
+	if err != nil {
+		return err
+	}
+	return d.applyConfig(cfg)
+}
+
+func (d *Daemon) applyConfig(cfg config.Config) error {
+	repo, err := cfg.ExpandedRepoPath()
+	if err != nil {
+		return err
+	}
+	if d.cfg.RepoPath != "" && repo != d.cfg.RepoPath {
+		return errors.New("changing repo.path requires restarting the daemon")
+	}
+	maxSize, err := cfg.Sync.MaxFileSizeBytes()
+	if err != nil {
+		return err
+	}
+	idxPath, err := state.IndexPath(repo)
+	if err != nil {
+		return err
+	}
+	basePath, err := state.BasePath(repo)
+	if err != nil {
+		return err
+	}
+	trashDir, err := state.TrashDir()
+	if err != nil {
+		return err
+	}
+
+	d.mu.Lock()
+	d.cfg.RepoPath = repo
+	d.cfg.RepoID = cfg.Repo.RepoID
+	d.cfg.Excludes = append([]string(nil), cfg.Exclude.Patterns...)
+	d.cfg.MaxFileSize = maxSize
+	d.cfg.Workers = cfg.Sync.Workers
+	d.cfg.IndexPath = idxPath
+	d.cfg.BasePath = basePath
+	d.cfg.TrashDir = trashDir
+	d.cfg.Mode = string(cfg.Sync.Mode)
+	d.cfg.Conflict = string(cfg.Sync.Conflict)
+	d.cfg.AutoSync = cfg.Device.AutoSync
+	d.cfg.Retention = RetentionSettings{
+		Daily: cfg.Retention.Daily, Weekly: cfg.Retention.Weekly,
+		Monthly: cfg.Retention.Monthly, TrashDays: cfg.Retention.TrashDays,
+	}
+	d.settings = Settings{
+		Excludes:  append([]string(nil), cfg.Exclude.Patterns...),
+		Retention: d.cfg.Retention,
+		Conflict:  string(cfg.Sync.Conflict),
+	}
+	d.mu.Unlock()
+	return nil
 }
 
 // SetEmitter registers the D-Bus signal emitter. Call before Run.

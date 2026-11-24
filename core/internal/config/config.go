@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -78,7 +79,6 @@ type Retention struct {
 
 // Device tunes drive detection.
 type Device struct {
-	RequireLUKS    bool `toml:"require_luks"`
 	AutoSync       bool `toml:"auto_sync"`
 	EjectAfterSync bool `toml:"eject_after_sync"`
 }
@@ -115,7 +115,7 @@ func Default() Config {
 			"**/*.tmp",
 		}},
 		Retention: Retention{Daily: 14, Weekly: 8, Monthly: 6, TrashDays: 30},
-		Device:    Device{RequireLUKS: false, AutoSync: true},
+		Device:    Device{AutoSync: true},
 	}
 }
 
@@ -170,6 +170,9 @@ func (c Config) Validate() error {
 	if c.Sync.Workers < 0 {
 		return errors.New("sync.workers must be >= 0")
 	}
+	if c.Retention.Daily < 0 || c.Retention.Weekly < 0 || c.Retention.Monthly < 0 {
+		return errors.New("retention counts must be >= 0")
+	}
 	if c.Retention.TrashDays < 0 {
 		return errors.New("retention.trash_days must be >= 0")
 	}
@@ -217,4 +220,38 @@ func (c Config) ExpandedRepoPath() (string, error) {
 		p = filepath.Join(home, strings.TrimPrefix(p, "~"))
 	}
 	return filepath.Abs(p)
+}
+
+// Save writes the configuration as TOML, replacing the file atomically.
+// Comments in the previous file are not preserved.
+func Save(path string, cfg Config) error {
+	var buf bytes.Buffer
+	enc := toml.NewEncoder(&buf)
+	if err := enc.Encode(cfg); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.tmp")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer func() { _ = os.Remove(name) }()
+	if _, err := tmp.Write(buf.Bytes()); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(name, path); err != nil {
+		return err
+	}
+	return nil
 }

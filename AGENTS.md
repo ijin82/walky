@@ -13,8 +13,10 @@ transport is a physical flash drive.
 - Core and CLI are Go (`core/`); the daemon runs in a systemd user session.
 - UI is Vala + GTK4/libadwaita (`ui/`), a separate process that talks over D-Bus
   only.
-- The drive is ext4 + LUKS2 with a `walky.json` marker; the on-drive format is
-  versioned. Other filesystems are rejected (see `store.CheckFilesystem`).
+- The drive is ext4 (optionally inside LUKS2) with a `walky.json` marker; the
+  on-drive format is versioned. Other filesystems are rejected (see
+  `store.CheckFilesystem`). LUKS is optional and never enforced, but strongly
+  recommended: a lost or stolen drive without encryption exposes all data.
 - Architecture and format rules — `docs/DESIGN.md` (the source of truth for the
   on-drive format and commit protocol). Live status and checklists — `PLAN.md`.
 
@@ -151,8 +153,13 @@ Additional rules:
 
 ## 7. Git
 
-- **Commit only on an explicit request from the user.** By default work stays in
-  the working tree.
+- **Default rule: commit only on an explicit request from the user.** By default
+  work stays in the working tree.
+- **Temporary exception (in force until the user revokes it):** once a change is
+  complete and `make check` is green, commit it without asking. One logical step
+  per commit, English message, no push and no tags. If checks fail, do not
+  commit. This permission is scoped to this repository and must not be assumed
+  elsewhere.
 - One logical step per commit; messages in English, imperative mood
   (`store: reject unsafe manifest paths`).
 - Do not commit unfinished work, push, or create tags without a request.

@@ -22,7 +22,7 @@ core/              Go module "walky": daemon, CLI, sync engine
                    state, config, machineid, version
 ui/                Vala + GTK4/libadwaita: separate process talking over D-Bus
   src/             Application.vala, Window.vala, main.vala
-data/              systemd unit, udev, sysctl, .desktop, example config
+data/              systemd unit, udev, sysctl, .desktop, walky.svg, example config
 docs/              DESIGN.md — architecture and pitfalls
                    MANUAL_TESTS.md — hardware and session checks
 PLAN.md            milestones, status, next tasks
@@ -122,7 +122,15 @@ make run-ui          # or ~/.local/bin/walky-ui
 The window shows daemon state, device, generation, last sync, free space, live
 progress and the last five files, with buttons for sync, pause, verify and
 eject. It polls the daemon over D-Bus once per second and never writes to the
-store itself. Settings and a tray/background indicator are not implemented yet.
+store itself.
+
+Settings (excludes, retention, conflict policy) are edited in the window and
+sent to the daemon, which validates, saves and applies them immediately; the UI
+never writes TOML itself. Note that saving rewrites the config file and drops
+comments. Closing the window hides it and keeps the app running in the
+background; the Background portal makes GNOME list it as a background app. If
+the daemon is not running, the UI asks the user systemd manager to start
+`walky.service` once and keeps polling.
 
 ## Trash
 
@@ -202,13 +210,20 @@ walky restore --store /mnt/WALKY --dest ~/Restored
 ```
 
 Supporting Windows/macOS would require giving up ext4 guarantees, which was
-considered and rejected. LUKS2 encryption is **strongly recommended**: the drive
-is portable and easily lost. LUKS tooling is planned for M8; until then the
-config flag `require_luks` is advisory, not enforced.
+considered and rejected.
+
+LUKS2 is **strongly recommended, though optional and never enforced**. The drive
+is portable and easy to lose: without encryption, anyone who finds or steals it
+can read every file and the full history. Walky does not require LUKS and will
+not refuse a plain ext4 drive; it only checks the filesystem. LUKS is a
+container, not a filesystem — after unlocking, the filesystem inside is still
+ext4, so an encrypted drive needs no special configuration. Create the container
+with GNOME Disks or `cryptsetup`.
 
 ## Data safety
 
 The drive is not a backup. Until a second replica exists, losing the drive means
-losing the data. The filesystem must be ext4. LUKS2 encryption is strongly
-recommended (tooling lands in M8); the `require_luks` config flag is advisory
-until then.
+losing the data. The filesystem must be ext4. LUKS2 is optional and not
+enforced, but **strongly recommended**: a lost or stolen unencrypted drive
+exposes all data and history. Walky deliberately refuses only non-ext4
+filesystems, never unencrypted ones.

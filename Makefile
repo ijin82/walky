@@ -1,5 +1,8 @@
 BIN       := bin/walky
 UI_BIN    := bin/walky-ui
+APP_ID    := io.github.ijin.Walky
+ICON_SRC  := data/walky.svg
+ICON_SIZES := 16 24 32 48 64 128 256
 GO_DIR    := core
 UI_DIR    := ui
 PREFIX    ?= /usr
@@ -55,16 +58,34 @@ install: build
 	install -Dm755 $(BIN) $(DESTDIR)$(PREFIX)/bin/walky
 	install -Dm755 $(UI_BIN) $(DESTDIR)$(PREFIX)/bin/walky-ui
 	install -Dm644 data/walky.desktop $(DESTDIR)$(PREFIX)/share/applications/walky.desktop
+	$(call install_icons,$(ICON_DIR_SYS))
 
 # Per-user deployment without root: binaries and the desktop entry land in
 # ~/.local, so the freshly built build is what the user runs.
 LOCAL_BIN   := $(HOME)/.local/bin
 LOCAL_APPS  := $(HOME)/.local/share/applications
+ICON_DIR_SYS   := $(DESTDIR)$(PREFIX)/share/icons/hicolor
+ICON_DIR_LOCAL := $(HOME)/.local/share/icons/hicolor
+
+# Install the scalable icon plus raster sizes when ImageMagick is available.
+define install_icons
+	install -Dm644 $(ICON_SRC) $(1)/scalable/apps/walky.svg
+	install -Dm644 $(ICON_SRC) $(1)/scalable/apps/$(APP_ID).svg
+	@if command -v magick >/dev/null 2>&1; then \
+		for s in $(ICON_SIZES); do \
+			mkdir -p $(1)/$${s}x$${s}/apps; \
+			magick $(ICON_SRC) -background none -resize $${s}x$${s} $(1)/$${s}x$${s}/apps/walky.png; \
+			cp $(1)/$${s}x$${s}/apps/walky.png $(1)/$${s}x$${s}/apps/$(APP_ID).png; \
+		done; \
+	fi
+	@command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t $(1) >/dev/null 2>&1 || true
+endef
 
 install-local: build
 	install -Dm755 $(BIN) $(LOCAL_BIN)/walky
 	install -Dm755 $(UI_BIN) $(LOCAL_BIN)/walky-ui
 	install -Dm644 data/walky.desktop $(LOCAL_APPS)/walky.desktop
+	$(call install_icons,$(ICON_DIR_LOCAL))
 	install -Dm644 data/walky.service $(HOME)/.config/systemd/user/walky.service
 	sed -i 's|/usr/bin/walky|%h/.local/bin/walky|' $(HOME)/.config/systemd/user/walky.service
 	@command -v update-desktop-database >/dev/null 2>&1 && \
@@ -75,6 +96,8 @@ install-local: build
 uninstall-local:
 	rm -f $(LOCAL_BIN)/walky $(LOCAL_BIN)/walky-ui
 	rm -f $(LOCAL_APPS)/walky.desktop
+	rm -f $(ICON_DIR_LOCAL)/scalable/apps/walky.svg $(ICON_DIR_LOCAL)/scalable/apps/$(APP_ID).svg
+	@for s in $(ICON_SIZES); do rm -f $(ICON_DIR_LOCAL)/$${s}x$${s}/apps/walky.png $(ICON_DIR_LOCAL)/$${s}x$${s}/apps/$(APP_ID).png; done
 	rm -f $(HOME)/.config/systemd/user/walky.service
 	@systemctl --user daemon-reload 2>/dev/null || true
 
@@ -85,6 +108,8 @@ install-data:
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/walky $(DESTDIR)$(PREFIX)/bin/walky-ui
+	rm -f $(ICON_DIR_SYS)/scalable/apps/walky.svg $(ICON_DIR_SYS)/scalable/apps/$(APP_ID).svg
+	@for s in $(ICON_SIZES); do rm -f $(ICON_DIR_SYS)/$${s}x$${s}/apps/walky.png $(ICON_DIR_SYS)/$${s}x$${s}/apps/$(APP_ID).png; done
 	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/user/walky.service
 	rm -f $(DESTDIR)/etc/sysctl.d/90-walky-inotify.conf
 	rm -f $(DESTDIR)/etc/udev/rules.d/99-walky-usb.rules

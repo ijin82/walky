@@ -77,6 +77,11 @@ func cmdDaemon(args []string) error {
 		Conflict:      string(cfg.Sync.Conflict),
 		BasePath:      basePath,
 		TrashDir:      trashDir,
+		ConfigPath:    cfg.Path,
+		Retention: daemon.RetentionSettings{
+			Daily: cfg.Retention.Daily, Weekly: cfg.Retention.Weekly,
+			Monthly: cfg.Retention.Monthly, TrashDays: cfg.Retention.TrashDays,
+		},
 	}, log)
 
 	svc, err := api.New(d, log)

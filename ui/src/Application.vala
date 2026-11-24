@@ -5,6 +5,7 @@ namespace Walky {
      */
     public class Application : Adw.Application {
         private Api api;
+        private Window? window;
 
         public Application () {
             Object (
@@ -12,11 +13,40 @@ namespace Walky {
                 flags: ApplicationFlags.DEFAULT_FLAGS
             );
             api = new Api();
+            request_background();
         }
 
         protected override void activate () {
-            var win = new Window (this, api);
-            win.present ();
+            if (window == null) {
+                window = new Window (this, api);
+            }
+            window.present ();
+        }
+
+        // Ask the desktop to keep the app listed as running in the background.
+        // Not every portal implementation supports it; failure is harmless.
+        private void request_background () {
+            try {
+                var proxy = new GLib.DBusProxy.for_bus_sync(
+                    GLib.BusType.SESSION, GLib.DBusProxyFlags.NONE, null,
+                    "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                    "org.freedesktop.portal.Background", null);
+                var options = new GLib.VariantDict();
+                options.insert_value("reason",
+                    new GLib.Variant("s", "Walky keeps the drive in sync in the background"));
+                options.insert_value("autostart", new GLib.Variant("b", false));
+                var args = new GLib.Variant("(sa{sv})", "", options.end());
+                proxy.call.begin("RequestBackground", args,
+                    GLib.DBusCallFlags.NONE, 5000, null, (obj, res) => {
+                        try {
+                            proxy.call.end(res);
+                        } catch (Error e) {
+                            debug("background portal: %s", e.message);
+                        }
+                    });
+            } catch (Error e) {
+                debug("background portal unavailable: %s", e.message);
+            }
         }
     }
 }

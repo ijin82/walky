@@ -58,9 +58,11 @@ disk. The local disk can be lost; a new machine must restore from the drive.
    hardlinks are supported natively; metadata is still duplicated into the
    manifest (for restoring onto another machine and for `export`).
 
-Implementation consequences: `require_luks = true` by default, the `current/`
-farm becomes possible (hardlinks on ext4), Windows compatibility is irrelevant —
-`renameat2`, `O_NOFOLLOW` and directory `fsync` can be used freely.
+Implementation consequences: the `current/` farm becomes possible (hardlinks on
+ext4), Windows compatibility is irrelevant — `renameat2`, `O_NOFOLLOW` and
+directory `fsync` can be used freely. LUKS is optional and never enforced, but
+strongly recommended against loss/theft: it is a container around ext4, so the
+filesystem check is the same with or without encryption.
 
 ---
 
@@ -292,7 +294,6 @@ monthly = 6
 trash_days = 30
 
 [device]
-require_luks = true
 auto_sync = true
 eject_after_sync = false
 ```

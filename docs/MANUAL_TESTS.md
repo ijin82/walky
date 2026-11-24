@@ -158,6 +158,17 @@ listed as running in the background and can be reopened.
 Finish a sync and trigger an error. Expected: exactly one notification per
 event, no duplicates.
 
+### MT-23 Settings and background
+
+1. Open Settings, change excludes, retention and the conflict policy, save.
+2. Close the window and reopen the app from the desktop.
+3. Check `~/.config/walky/config.toml` and `walky status`.
+
+Expected: values are applied immediately (next sync uses them), the file is
+rewritten without errors (comments are lost, this is known), the window reopens
+with the same values, and GNOME lists Walky as a background app while the window
+is closed.
+
 ## Encryption (M8) — pending implementation
 
 ### MT-23 LUKS unlock
