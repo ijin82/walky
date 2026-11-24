@@ -75,6 +75,21 @@ disable_service() {
     service_status
 }
 
+restart_service() {
+    if ! systemd_available; then
+        warn "systemd user session is not available; restart 'walky daemon' manually"
+        return 1
+    fi
+    systemctl --user daemon-reload
+    if systemctl --user restart walky.service; then
+        info "walky.service restarted"
+        service_status
+    else
+        warn "failed to restart; see: journalctl --user -u walky.service -n 30"
+        return 1
+    fi
+}
+
 offer_service() {
     local answer
     if ! systemd_available; then
@@ -127,11 +142,11 @@ manage_service() {
     if [ "${enabled}" = "enabled" ]; then
         if [ "${active}" = "active" ]; then
             echo "  It is enabled and running."
-            echo "  Press Enter to stop and disable it, or n to leave it alone."
-            printf "  Stop and disable it? [y/N]: "
+            printf "  Action: [r]estart, [d]isable and stop, or [n]othing [r/d/N]: "
             if read -r answer; then
                 case "${answer}" in
-                    y|Y|yes|YES) disable_service ;;
+                    r|R|restart) restart_service ;;
+                    d|D|disable|y|Y|yes|YES) disable_service ;;
                     *) echo "  Left running and enabled." ;;
                 esac
             fi
@@ -200,6 +215,7 @@ Commands:
   disable           Stop and disable the user service
   start             Start the user service
   stop              Stop the user service
+  restart           Reload unit and restart the user service
   help              Show this help
 
 Examples:
@@ -212,6 +228,12 @@ USAGE
 install_local() {
     info "installing for ${USER} into ~/.local"
     make install-local
+    if systemd_available; then
+        systemctl --user daemon-reload
+        if [ "$(service_active)" = "active" ]; then
+            systemctl --user restart walky.service && info "walky.service restarted"
+        fi
+    fi
     echo
     echo "Done."
     service_status
@@ -348,6 +370,7 @@ case "${1:-menu}" in
         systemctl --user stop walky.service && info "walky.service stopped"
         service_status
         ;;
+    restart) restart_service ;;
     -h|--help|help) usage ;;
     *)
         echo "Unknown command: $1" >&2

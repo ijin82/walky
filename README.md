@@ -317,11 +317,12 @@ Running `./install.sh` without arguments opens a menu:
 4. uninstall the system copy,
 5. service status (enable/disable the user service).
 
-`./install.sh local` prints the unit path, whether it is enabled and active, and
-offers to enable and start it. `./install.sh service` shows the status and offers
-the matching action (enable, start, stop or disable); `enable`, `disable`,
-`start` and `stop` do the same non-interactively. Uninstalling stops and disables the
-service before removing the unit.
+`./install.sh local` prints the unit path, restarts `walky.service` if it is
+already active, and offers to enable and start it. `./install.sh service` shows
+the status and offers the matching action (enable, start, restart, stop or
+disable); `enable`, `disable`, `start`, `stop` and `restart` do the same
+non-interactively. Uninstalling stops and disables the service before removing
+the unit.
 
 The script builds both binaries and installs `walky`, `walky-ui`, the desktop
 entry and a systemd user unit. The local mode needs no root and rewrites the unit
