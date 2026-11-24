@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -33,14 +34,72 @@ func Eject(ctx context.Context, mountPoint string) error {
 		map[string]dbus.Variant{"force": dbus.MakeVariant(false)}).Err; err != nil {
 		return fmt.Errorf("unmount %s: %w", mountPoint, err)
 	}
-	if drivePath != "" {
-		drive := conn.Object(udisksName, drivePath)
-		if err := drive.CallWithContext(ctx, "org.freedesktop.UDisks2.Drive.PowerOff", 0,
-			map[string]dbus.Variant{}).Err; err != nil {
-			return fmt.Errorf("power off drive: %w", err)
-		}
+	// A LUKS mapping keeps the physical drive busy; close it before powering
+	// off. Both steps are best-effort: once the filesystem is unmounted it is
+	// safe to unplug even when polkit refuses the lock or power-off.
+	if backing := encryptedBacking(objects, fsPath); backing != "" {
+		_ = conn.Object(udisksName, backing).CallWithContext(ctx,
+			"org.freedesktop.UDisks2.Encrypted.Lock", 0, map[string]dbus.Variant{}).Err
+	}
+	if drivePath != "" && drivePath != "/" {
+		_ = conn.Object(udisksName, drivePath).CallWithContext(ctx,
+			"org.freedesktop.UDisks2.Drive.PowerOff", 0, map[string]dbus.Variant{}).Err
 	}
 	return nil
+}
+
+// encryptedBacking returns the LUKS backing object for a cleartext filesystem.
+func encryptedBacking(objects map[dbus.ObjectPath]map[string]map[string]dbus.Variant, fsPath dbus.ObjectPath) dbus.ObjectPath {
+	ifaces, ok := objects[fsPath]
+	if !ok {
+		return ""
+	}
+	block, ok := ifaces["org.freedesktop.UDisks2.Block"]
+	if !ok {
+		return ""
+	}
+	cb, ok := block["CryptoBackingDevice"]
+	if !ok {
+		return ""
+	}
+	backing, _ := cb.Value().(dbus.ObjectPath)
+	if backing == "" || backing == "/" {
+		return ""
+	}
+	if _, ok := objects[backing]["org.freedesktop.UDisks2.Encrypted"]; !ok {
+		return ""
+	}
+	return backing
+}
+
+// blockDrive returns the physical drive for a block device. LUKS cleartext
+// devices report "/" as their drive, so follow CryptoBackingDevice to the
+// underlying encrypted device in that case.
+func blockDrive(objects map[dbus.ObjectPath]map[string]map[string]dbus.Variant, ifaces map[string]map[string]dbus.Variant) dbus.ObjectPath {
+	block, ok := ifaces["org.freedesktop.UDisks2.Block"]
+	if !ok {
+		return ""
+	}
+	var drive dbus.ObjectPath
+	if d, ok := block["Drive"]; ok {
+		drive, _ = d.Value().(dbus.ObjectPath)
+	}
+	if drive != "" && drive != "/" {
+		return drive
+	}
+	if cb, ok := block["CryptoBackingDevice"]; ok {
+		backing, _ := cb.Value().(dbus.ObjectPath)
+		if backing != "" && backing != "/" {
+			if b, ok := objects[backing]["org.freedesktop.UDisks2.Block"]; ok {
+				if d, ok := b["Drive"]; ok {
+					if v, ok := d.Value().(dbus.ObjectPath); ok {
+						return v
+					}
+				}
+			}
+		}
+	}
+	return drive
 }
 
 // FindMount locates the udisks filesystem object for a mount point and, when
@@ -60,15 +119,11 @@ func FindMount(objects map[dbus.ObjectPath]map[string]map[string]dbus.Variant, m
 			continue
 		}
 		for _, p := range points {
-			if string(p) != mountPoint {
+			// udisks2 returns NUL-terminated byte arrays.
+			if strings.TrimRight(string(p), "\x00") != mountPoint {
 				continue
 			}
-			var drive dbus.ObjectPath
-			if block, ok := ifaces["org.freedesktop.UDisks2.Block"]; ok {
-				if d, ok := block["Drive"]; ok {
-					drive, _ = d.Value().(dbus.ObjectPath)
-				}
-			}
+			drive := blockDrive(objects, ifaces)
 			return path, drive, nil
 		}
 	}
