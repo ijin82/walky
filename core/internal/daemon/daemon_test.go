@@ -6,11 +6,13 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"walky/internal/config"
 	"walky/internal/device"
 	"walky/internal/engine"
 	"walky/internal/store"
@@ -408,5 +410,68 @@ func TestScheduledGCRuns(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no gc event: %+v", d.Events(10))
+	}
+}
+
+func TestDrivesAndInitStore(t *testing.T) {
+	mount := t.TempDir()
+	repo := t.TempDir()
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Default()
+	cfg.Repo.Path = repo
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	d := New(Config{RepoPath: repo, ConfigPath: cfgPath, NoTray: true},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d.mounts = func() ([]device.Mount, error) {
+		return []device.Mount{{Point: mount, FSType: "ext4"}}, nil
+	}
+	d.checkFS = func(string) error { return nil }
+	d.mountFilter = func(string) bool { return true }
+
+	drives, err := d.Drives()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(drives) != 1 || drives[0].Initialized {
+		t.Fatalf("drives = %+v", drives)
+	}
+
+	id, err := d.InitStore(mount, repo)
+	if err != nil {
+		t.Fatalf("InitStore: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(mount, "WALKY", store.MarkerName)); err != nil {
+		t.Fatalf("marker: %v", err)
+	}
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Repo.RepoID != id || loaded.Repo.Path != repo {
+		t.Fatalf("config = %+v", loaded.Repo)
+	}
+	drives, err = d.Drives()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !drives[0].Initialized || drives[0].RepoID != id {
+		t.Fatalf("drives after init = %+v", drives[0])
+	}
+}
+
+func TestUseStoreRequiresInitializedDrive(t *testing.T) {
+	mount := t.TempDir()
+	repo := t.TempDir()
+	d := New(Config{RepoPath: repo, NoTray: true},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	d.mounts = func() ([]device.Mount, error) {
+		return []device.Mount{{Point: mount, FSType: "ext4"}}, nil
+	}
+	d.checkFS = func(string) error { return nil }
+	d.mountFilter = func(string) bool { return true }
+	if _, err := d.UseStore(mount, repo); err == nil {
+		t.Fatal("UseStore accepted a drive without a store")
 	}
 }

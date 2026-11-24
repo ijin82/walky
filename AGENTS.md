@@ -56,6 +56,7 @@ core/                  Go module "walky" (built independently)
   internal/daemon/     state machine, device lifecycle, recent events
   internal/device/     mount table watcher, marker checks, eject, sleep
   internal/api/        D-Bus service (methods, signals)
+  internal/setup/      store initialization shared by CLI and GUI
   internal/state/      machine-local paths
   internal/config/     configuration and validation
 ui/                    Vala + GTK4/libadwaita, its own Makefile (valac)

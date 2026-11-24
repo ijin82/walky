@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"walky/internal/config"
+	"walky/internal/device"
 )
 
 func settingsDaemon(t *testing.T) (*Daemon, string) {
@@ -89,17 +90,32 @@ func TestSettingsRejectInvalidConflict(t *testing.T) {
 	}
 }
 
-func TestSettingsRejectRepoChange(t *testing.T) {
+func TestRepoChangeAllowedWhenIdle(t *testing.T) {
 	d, cfgPath := settingsDaemon(t)
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Repo.Path = t.TempDir()
+	newRepo := t.TempDir()
+	cfg.Repo.Path = newRepo
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}
+	if err := d.ReloadConfig(); err != nil {
+		t.Fatalf("reload while idle: %v", err)
+	}
+	if d.cfg.RepoPath != newRepo {
+		t.Fatalf("repo = %q, want %q", d.cfg.RepoPath, newRepo)
+	}
+
+	// While a drive is attached the repository cannot move under a sync.
+	third := t.TempDir()
+	cfg.Repo.Path = third
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	d.dev = &device.Device{StoreRoot: newRepo, MountPoint: newRepo}
 	if err := d.ReloadConfig(); err == nil {
-		t.Fatal("repo change was accepted without a restart")
+		t.Fatal("repo change was accepted while a drive is attached")
 	}
 }

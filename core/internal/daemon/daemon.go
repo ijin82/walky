@@ -17,6 +17,7 @@ import (
 	"walky/internal/config"
 	"walky/internal/device"
 	"walky/internal/engine"
+	"walky/internal/setup"
 	"walky/internal/state"
 	"walky/internal/store"
 	"walky/internal/tray"
@@ -156,13 +157,15 @@ type Daemon struct {
 	ejector Ejector
 	log     *slog.Logger
 
-	sleepWatch func(context.Context) (<-chan bool, error)
-	checkFS    func(string) error
-	mounter    Mounter
-	mounting   bool
-	gcRunning  bool
-	trayItem   *tray.Tray
-	shutdown   context.CancelFunc
+	sleepWatch  func(context.Context) (<-chan bool, error)
+	checkFS     func(string) error
+	mounter     Mounter
+	mounting    bool
+	mounts      func() ([]device.Mount, error)
+	mountFilter func(string) bool
+	gcRunning   bool
+	trayItem    *tray.Tray
+	shutdown    context.CancelFunc
 
 	mu       sync.Mutex
 	emitter  Emitter
@@ -203,6 +206,7 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 		sleepWatch: device.WatchSleep,
 		checkFS:    store.CheckFilesystem,
 		mounter:    mounterFunc(device.MountLabeled),
+		mounts:     func() ([]device.Mount, error) { return device.ReadMounts("/proc/self/mountinfo") },
 		state:      StateNoDevice,
 		settings: Settings{
 			Excludes:  append([]string(nil), cfg.Excludes...),
@@ -272,7 +276,12 @@ func (d *Daemon) applyConfig(cfg config.Config) error {
 		return err
 	}
 	if d.cfg.RepoPath != "" && repo != d.cfg.RepoPath {
-		return errors.New("changing repo.path requires restarting the daemon")
+		d.mu.Lock()
+		busy := d.syncing || d.dev != nil
+		d.mu.Unlock()
+		if busy {
+			return errors.New("detach the drive and wait for the sync to finish before changing repo.path")
+		}
 	}
 	maxSize, err := cfg.Sync.MaxFileSizeBytes()
 	if err != nil {
@@ -856,6 +865,153 @@ func (d *Daemon) Pause(paused bool) {
 	if !paused {
 		d.tryAutoSync()
 	}
+}
+
+// Drive is a removable ext4 mount offered to the setup UI.
+type Drive struct {
+	MountPoint  string
+	Label       string
+	StoreRoot   string
+	RepoID      string
+	Initialized bool
+	FreeBytes   int64
+	Encrypted   bool
+}
+
+// Drives lists removable ext4 mounts under /run/media, /media and /mnt.
+func (d *Daemon) Drives() ([]Drive, error) {
+	readMounts := d.mounts
+	if readMounts == nil {
+		readMounts = func() ([]device.Mount, error) {
+			return device.ReadMounts("/proc/self/mountinfo")
+		}
+	}
+	mounts, err := readMounts()
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool)
+	var out []Drive
+	for _, m := range mounts {
+		filter := d.mountFilter
+		if filter == nil {
+			filter = isRemovableMount
+		}
+		if !filter(m.Point) || seen[m.Point] {
+			continue
+		}
+		checkFS := d.checkFS
+		if checkFS == nil {
+			checkFS = store.CheckFilesystem
+		}
+		if err := checkFS(m.Point); err != nil {
+			continue
+		}
+		seen[m.Point] = true
+		drive := Drive{
+			MountPoint: m.Point,
+			Label:      filepath.Base(m.Point),
+			StoreRoot:  filepath.Join(m.Point, "WALKY"),
+			FreeBytes:  freeBytes(m.Point),
+		}
+		if marker, err := store.ReadMarker(drive.StoreRoot); err == nil {
+			drive.Initialized = true
+			drive.RepoID = marker.RepoID
+			if marker.Label != "" {
+				drive.Label = marker.Label
+			}
+		} else if marker, err := store.ReadMarker(m.Point); err == nil {
+			drive.StoreRoot = m.Point
+			drive.Initialized = true
+			drive.RepoID = marker.RepoID
+			if marker.Label != "" {
+				drive.Label = marker.Label
+			}
+		}
+		drive.Encrypted, _ = device.EncryptionStatus(m.Point)
+		out = append(out, drive)
+	}
+	return out, nil
+}
+
+func isRemovableMount(point string) bool {
+	for _, prefix := range []string{"/run/media/", "/media/", "/mnt/"} {
+		if strings.HasPrefix(point, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// InitStore creates a new store on a listed drive and points the config at the
+// repository. The GUI and CLI share setup.Initialize.
+func (d *Daemon) InitStore(mountPoint, repoPath string) (string, error) {
+	drives, err := d.Drives()
+	if err != nil {
+		return "", err
+	}
+	var target *Drive
+	for i := range drives {
+		if drives[i].MountPoint == mountPoint {
+			target = &drives[i]
+			break
+		}
+	}
+	if target == nil {
+		return "", errors.New("this mount is not a removable ext4 filesystem")
+	}
+	if target.Initialized {
+		return "", fmt.Errorf("this drive already contains a store at %s", target.StoreRoot)
+	}
+	if d.cfg.ConfigPath == "" {
+		return "", errors.New("config path is not set")
+	}
+	storeRoot := filepath.Join(mountPoint, "WALKY")
+	checkFS := d.checkFS
+	if checkFS == nil {
+		checkFS = store.CheckFilesystem
+	}
+	res, err := setup.Initialize(storeRoot, false, checkFS)
+	if err != nil {
+		return "", err
+	}
+	if err := setup.ConfigureRepo(d.cfg.ConfigPath, repoPath, res.RepoID); err != nil {
+		return res.RepoID, err
+	}
+	if err := d.ReloadConfig(); err != nil {
+		return res.RepoID, err
+	}
+	d.recordEvent(Event{Path: storeRoot, Op: "init", Result: "ok", Time: time.Now().Unix()})
+	d.log.Info("store initialized", "root", storeRoot, "repo", repoPath)
+	return res.RepoID, nil
+}
+
+// UseStore binds an already initialized drive to a repository.
+func (d *Daemon) UseStore(mountPoint, repoPath string) (string, error) {
+	drives, err := d.Drives()
+	if err != nil {
+		return "", err
+	}
+	for _, drive := range drives {
+		if drive.MountPoint != mountPoint {
+			continue
+		}
+		if !drive.Initialized {
+			return "", errors.New("this drive has no Walky store yet")
+		}
+		if d.cfg.ConfigPath == "" {
+			return "", errors.New("config path is not set")
+		}
+		if err := setup.ConfigureRepo(d.cfg.ConfigPath, repoPath, drive.RepoID); err != nil {
+			return "", err
+		}
+		if err := d.ReloadConfig(); err != nil {
+			return drive.RepoID, err
+		}
+		d.recordEvent(Event{Path: drive.StoreRoot, Op: "adopt", Result: "ok", Time: time.Now().Unix()})
+		return drive.RepoID, nil
+	}
+	return "", errors.New("mount is not a removable ext4 filesystem")
 }
 
 // Eject unmounts the current drive. It refuses while a sync is running.

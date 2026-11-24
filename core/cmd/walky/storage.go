@@ -15,6 +15,7 @@ import (
 	"walky/internal/device"
 	"walky/internal/engine"
 	"walky/internal/machineid"
+	"walky/internal/setup"
 	"walky/internal/state"
 	"walky/internal/store"
 )
@@ -23,6 +24,7 @@ func cmdInit(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	cfgPath, verbose := commonFlags(fs)
 	force := fs.Bool("force", false, "adopt a non-empty directory")
+	repo := fs.String("repo", "", "also configure this folder as the sync root")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -32,21 +34,31 @@ func cmdInit(args []string) error {
 		return errors.New("usage: walky init <mountpoint> [--force]")
 	}
 
-	if err := filesystemCheck(fs.Arg(0)); err != nil {
-		return err
-	}
-	st, err := store.Init(fs.Arg(0), *force)
+	res, err := setup.Initialize(fs.Arg(0), *force, filesystemCheck)
 	if err != nil {
 		return err
 	}
-	m := st.Marker()
-	fmt.Printf("initialized store at %s\n", st.Root())
-	fmt.Printf("repo_id: %s\n", m.RepoID)
-	fmt.Printf("format:  %d\n", m.Format)
-	fmt.Printf("\nPin the drive identity in ~/.config/walky/config.toml:\n\n[repo]\npath = \"~/Sync\"\nrepo_id = %q\n", m.RepoID)
+	fmt.Printf("initialized store at %s\n", res.StoreRoot)
+	fmt.Printf("repo_id: %s\n", res.RepoID)
+	fmt.Printf("format:  %d\n", res.Format)
+	if *repo != "" {
+		cfgPath := *cfgPath
+		if cfgPath == "" {
+			cfgPath, err = config.DefaultPath()
+			if err != nil {
+				return err
+			}
+		}
+		if err := setup.ConfigureRepo(cfgPath, *repo, res.RepoID); err != nil {
+			return err
+		}
+		fmt.Printf("\nconfigured %s with repo_id %s\n", *repo, res.RepoID)
+		return nil
+	}
+	fmt.Printf("\nPin the drive identity in ~/.config/walky/config.toml:\n\n[repo]\npath = \"~/Sync\"\nrepo_id = %q\n", res.RepoID)
 	fmt.Println("\nTip: if the desktop does not automount the drive, give the filesystem a label")
 	fmt.Println("     (e2label /dev/sdX WALKY) and match it with [device] label in the config.")
-	if encrypted, known := device.EncryptionStatus(st.Root()); known && !encrypted {
+	if encrypted, known := device.EncryptionStatus(res.StoreRoot); known && !encrypted {
 		fmt.Fprintln(os.Stderr, "warning: this drive is not encrypted. LUKS2 is strongly recommended: a lost or stolen drive exposes all data.")
 	}
 	return nil

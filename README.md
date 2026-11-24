@@ -90,6 +90,8 @@ never blocks initialization.
 ```sh
 # the drive is already mounted
 ./bin/walky init /run/media/$USER/WALKY
+# or initialize and configure the folder in one step
+./bin/walky init /run/media/$USER/WALKY --repo ~/Sync
 ./bin/walky snapshot --store /run/media/$USER/WALKY --repo ~/Sync
 ./bin/walky ls --store /run/media/$USER/WALKY --long
 ./bin/walky verify --store /run/media/$USER/WALKY --full
@@ -139,6 +141,11 @@ The window shows daemon state, device, generation, last sync, free space, live
 progress and the last five files, with buttons for sync, pause, verify and
 eject. It polls the daemon over D-Bus once per second and never writes to the
 store itself.
+
+The same window has **Set up a drive…**: it lists mounted removable ext4
+filesystems, shows whether a store already exists, lets you pick the local
+folder and initializes the store in one click. It uses the daemon, so the same
+`internal/setup` code runs for the GUI and `walky init`.
 
 Settings (excludes, retention, conflict policy) are edited in the window and
 sent to the daemon, which validates, saves and applies them immediately; the UI

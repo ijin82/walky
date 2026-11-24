@@ -164,6 +164,17 @@ Quit; “Open Walky” restores the window. The icon must also survive restartin
 Finish a sync and trigger an error. Expected: exactly one notification per
 event, no duplicates.
 
+### MT-24 Initialize a drive from the GUI
+
+1. Plug a removable ext4 drive (LUKS unlocked) and open Walky.
+2. Choose “Set up a drive…”, select the drive and a local folder.
+3. Press “Initialize drive”.
+
+Expected: `/WALKY` appears on the drive, the config gets `repo.path` and
+`repo_id`, the drive shows up in the main window, and the first sync starts
+without a terminal. Existing files on the drive are untouched. Reopening the
+wizard shows the drive as “store ready” and offers “Use this drive”.
+
 ### MT-23 Settings and background
 
 1. Open Settings, change excludes, retention and the conflict policy, save.

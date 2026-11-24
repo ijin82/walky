@@ -16,6 +16,9 @@ namespace Walky {
         public signal void settings_updated(GLib.Variant settings);
         public signal void settings_saved();
         public signal void settings_failed(string message);
+        public signal void drives_updated(GLib.Variant drives);
+        public signal void store_ready(string repo_id);
+        public signal void store_failed(string message);
 
         private bool daemon_start_attempted = false;
 
@@ -63,6 +66,18 @@ namespace Walky {
         public void save_settings (string[] excludes, int daily, int weekly, int monthly,
                                    int trash_days, string conflict) {
             save_settings_async.begin(excludes, daily, weekly, monthly, trash_days, conflict);
+        }
+
+        public void fetch_drives () {
+            fetch_drives_async.begin();
+        }
+
+        public void init_store (string mount_point, string repo_path) {
+            init_store_async.begin(mount_point, repo_path, true);
+        }
+
+        public void use_store (string mount_point, string repo_path) {
+            init_store_async.begin(mount_point, repo_path, false);
         }
 
         private async void fetch_status () {
@@ -133,6 +148,36 @@ namespace Walky {
                     });
             } catch (Error e) {
                 warning("systemd manager unavailable: %s", e.message);
+            }
+        }
+
+        private async void fetch_drives_async () {
+            if (proxy == null) {
+                store_failed("Walky daemon is not running");
+                return;
+            }
+            try {
+                var reply = yield proxy.call("GetDrives", null,
+                    GLib.DBusCallFlags.NONE, 3000, null);
+                drives_updated(reply.get_child_value(0));
+            } catch (Error e) {
+                store_failed(e.message);
+            }
+        }
+
+        private async void init_store_async (string mount_point, string repo_path, bool create) {
+            if (proxy == null) {
+                store_failed("Walky daemon is not running");
+                return;
+            }
+            try {
+                var method = create ? "InitStore" : "UseStore";
+                var reply = yield proxy.call(method,
+                    new GLib.Variant("(ss)", mount_point, repo_path),
+                    GLib.DBusCallFlags.NONE, 15000, null);
+                store_ready(reply.get_child_value(0).get_string());
+            } catch (Error e) {
+                store_failed(e.message);
             }
         }
 

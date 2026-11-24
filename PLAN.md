@@ -43,6 +43,9 @@ Version: `0.1.0` · updated: 2026-11-24
 - **Tray** — the daemon owns a StatusNotifierItem (AppIndicator) with a menu for
   sync, pause, open, verify and quit; the icon path is independent of the UI.
   A missing daemon is started through systemd on demand.
+- **Setup** — `walky init` and the GUI wizard share `internal/setup`; the wizard
+  lists mounted removable ext4 drives, initializes `/WALKY`, writes `repo.path`
+  and `repo_id`, and can adopt an existing store.
 - **Packaging surface** — `install.sh` (local/system/uninstall), systemd user
   unit, `.desktop`, icon in hicolor (SVG + PNG 16–256), `VERSION`.
 - **Policy** — Linux-only, ext4-only enforced at init/CLI/daemon; LUKS optional
@@ -65,7 +68,8 @@ hardware/session checks remain.
 - [x] Start `walky.service` through the user systemd manager when the daemon is
       not running.
 - [x] StatusNotifierItem tray icon owned by the daemon; no Background portal.
-- [ ] Manual checks MT-10…MT-14 and MT-20…MT-23 on a real session.
+- [x] GUI initialization wizard on top of the shared setup code.
+- [ ] Manual checks MT-10…MT-14 and MT-20…MT-24 on a real session.
 
 ### P1 — drive lifecycle
 

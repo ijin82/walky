@@ -102,6 +102,33 @@ func (s *Service) GetStatus() (map[string]dbus.Variant, *dbus.Error) {
 	return statusMap(s.d.Status()), nil
 }
 
+// GetDrives lists removable ext4 mounts for the setup wizard.
+func (s *Service) GetDrives() ([]daemon.Drive, *dbus.Error) {
+	drives, err := s.d.Drives()
+	if err != nil {
+		return nil, dbus.MakeFailedError(err)
+	}
+	return drives, nil
+}
+
+// InitStore creates a store on a listed drive and binds it to a repository.
+func (s *Service) InitStore(mountPoint string, repoPath string) (string, *dbus.Error) {
+	id, err := s.d.InitStore(mountPoint, repoPath)
+	if err != nil {
+		return id, dbus.MakeFailedError(err)
+	}
+	return id, nil
+}
+
+// UseStore binds an existing store to a repository.
+func (s *Service) UseStore(mountPoint string, repoPath string) (string, *dbus.Error) {
+	id, err := s.d.UseStore(mountPoint, repoPath)
+	if err != nil {
+		return id, dbus.MakeFailedError(err)
+	}
+	return id, nil
+}
+
 // GetSettings returns the editable configuration.
 func (s *Service) GetSettings() (map[string]dbus.Variant, *dbus.Error) {
 	st := s.d.Settings()
