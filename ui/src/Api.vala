@@ -60,9 +60,15 @@ namespace Walky {
 
         public signal void verify_finished(string summary);
         public signal void verify_failed(string message);
+        public signal void repo_path_changed(string repo_path);
+        public signal void repo_path_failed(string message);
 
         public void verify () {
             verify_async.begin();
+        }
+
+        public void set_repo_path (string repo_path) {
+            set_repo_path_async.begin(repo_path);
         }
 
         public void fetch_settings () {
@@ -209,6 +215,26 @@ namespace Walky {
                 store_ready(reply.get_child_value(0).get_string());
             } catch (Error e) {
                 store_failed(e.message);
+            }
+        }
+
+        private async void set_repo_path_async (string repo_path) {
+            if (proxy == null) {
+                repo_path_failed("Daemon unavailable");
+                return;
+            }
+            try {
+                yield proxy.call(
+                    "SetRepoPath",
+                    new GLib.Variant("(s)", repo_path),
+                    GLib.DBusCallFlags.NONE,
+                    -1,
+                    null
+                );
+                repo_path_changed(repo_path);
+                refresh();
+            } catch (Error e) {
+                repo_path_failed(e.message);
             }
         }
 

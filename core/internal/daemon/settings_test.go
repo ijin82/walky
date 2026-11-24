@@ -123,3 +123,35 @@ func TestRepoChangeAllowedWhenIdle(t *testing.T) {
 		t.Fatal("repo change was accepted while a drive is attached")
 	}
 }
+
+func TestSetRepoPath(t *testing.T) {
+	d, cfgPath := settingsDaemon(t)
+	nextRepo := t.TempDir()
+
+	if err := d.SetRepoPath(nextRepo); err != nil {
+		t.Fatalf("SetRepoPath: %v", err)
+	}
+	if got := d.Status().RepoPath; got != nextRepo {
+		t.Fatalf("Status.RepoPath = %q, want %q", got, nextRepo)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Repo.Path != nextRepo {
+		t.Fatalf("config repo.path = %q, want %q", cfg.Repo.Path, nextRepo)
+	}
+
+	// Overlapping the attached store must be rejected.
+	storeDir := t.TempDir()
+	d.dev = &device.Device{StoreRoot: storeDir, MountPoint: storeDir}
+	if err := d.SetRepoPath(storeDir); err == nil {
+		t.Fatal("SetRepoPath accepted the store directory itself")
+	}
+
+	// Changing while syncing must be rejected.
+	d.syncing = true
+	if err := d.SetRepoPath(t.TempDir()); err == nil {
+		t.Fatal("SetRepoPath accepted change while syncing")
+	}
+}

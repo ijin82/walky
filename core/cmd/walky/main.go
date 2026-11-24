@@ -167,6 +167,9 @@ func printRemoteStatus(st map[string]any, asJSON bool) error {
 	}
 	fmt.Printf("walky %s\n", version.Version)
 	fmt.Printf("state:      %v\n", st["state"])
+	if v, _ := st["repo_path"].(string); v != "" {
+		fmt.Printf("folder:     %s\n", v)
+	}
 	if v, _ := st["device"].(string); v != "" {
 		fmt.Printf("device:     %s\n", v)
 	}

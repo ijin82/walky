@@ -202,6 +202,14 @@ func (s *Service) ReloadConfig() *dbus.Error {
 	return nil
 }
 
+// SetRepoPath changes the local synchronized folder.
+func (s *Service) SetRepoPath(repoPath string) *dbus.Error {
+	if err := s.d.SetRepoPath(repoPath); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
 // GetEvents returns the most recent activity, newest first.
 func (s *Service) GetEvents(limit uint32) ([]daemon.Event, *dbus.Error) {
 	return s.d.Events(int(limit)), nil
@@ -254,6 +262,7 @@ func statusMap(st daemon.Status) map[string]dbus.Variant {
 		"device":           dbus.MakeVariant(st.Device),
 		"store_root":       dbus.MakeVariant(st.StoreRoot),
 		"mount_point":      dbus.MakeVariant(st.MountPoint),
+		"repo_path":        dbus.MakeVariant(st.RepoPath),
 		"repo_id":          dbus.MakeVariant(st.RepoID),
 		"last_sync":        dbus.MakeVariant(st.LastSync),
 		"generation":       dbus.MakeVariant(st.Generation),

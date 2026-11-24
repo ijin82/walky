@@ -8,6 +8,8 @@ namespace Walky {
         private Adw.WindowTitle title_widget;
         private Adw.Banner banner;
         private Adw.ActionRow device_row;
+        private Adw.ActionRow folder_row;
+        private Gtk.Button change_folder_button;
         private Adw.ActionRow generation_row;
         private Adw.ActionRow last_sync_row;
         private Adw.ActionRow free_row;
@@ -42,6 +44,8 @@ namespace Walky {
             api.unavailable.connect(on_unavailable);
             api.verify_finished.connect(on_verify_finished);
             api.verify_failed.connect(on_verify_failed);
+            api.repo_path_changed.connect(on_repo_path_changed);
+            api.repo_path_failed.connect(on_repo_path_failed);
 
             GLib.Timeout.add_seconds(1, () => {
                 api.refresh();
@@ -145,6 +149,15 @@ namespace Walky {
             device_row.subtitle = "No drive";
             group.add(device_row);
 
+            folder_row = new Adw.ActionRow();
+            folder_row.title = "Folder";
+            folder_row.subtitle = "Not configured";
+            change_folder_button = new Gtk.Button.with_label("Change…");
+            change_folder_button.valign = Gtk.Align.CENTER;
+            change_folder_button.clicked.connect(() => choose_sync_folder.begin());
+            folder_row.add_suffix(change_folder_button);
+            group.add(folder_row);
+
             generation_row = new Adw.ActionRow();
             generation_row.title = "Generation";
             generation_row.subtitle = "—";
@@ -238,6 +251,51 @@ namespace Walky {
             send_notification("Integrity check failed", message);
         }
 
+        private async void choose_sync_folder () {
+            var dialog = new Gtk.FileDialog();
+            dialog.title = "Choose sync folder";
+            try {
+                var file = yield dialog.select_folder(this, null);
+                var chosen = file.get_path();
+                if (chosen == null || chosen == "") {
+                    return;
+                }
+                if (chosen == folder_row.subtitle) {
+                    return;
+                }
+                confirm_change_folder(chosen);
+            } catch (Error e) {
+                // Cancelled by the user.
+            }
+        }
+
+        private void confirm_change_folder (string new_path) {
+            var alert = new Adw.AlertDialog(
+                "Change sync folder?",
+                "Walky will start synchronizing with:\n%s\n\nFiles in the previous folder will not be deleted.".printf(new_path)
+            );
+            alert.add_response("cancel", "Cancel");
+            alert.add_response("change", "Change folder");
+            alert.set_response_appearance("change", Adw.ResponseAppearance.SUGGESTED);
+            alert.default_response = "cancel";
+            alert.close_response = "cancel";
+            alert.response.connect((response) => {
+                if (response == "change") {
+                    api.set_repo_path(new_path);
+                }
+            });
+            alert.present(this);
+        }
+
+        private void on_repo_path_changed (string repo_path) {
+            folder_row.subtitle = repo_path;
+            toast_overlay.add_toast(new Adw.Toast("Sync folder changed"));
+        }
+
+        private void on_repo_path_failed (string message) {
+            toast_overlay.add_toast(new Adw.Toast("Cannot change folder: " + message));
+        }
+
         private void open_recovery () {
             recovery_window = new RecoveryWindow(application as Gtk.Application, api);
             recovery_window.present();
@@ -271,6 +329,9 @@ namespace Walky {
                 device_row.subtitle = "No drive";
             }
 
+            var repo_path = string_value(status, "repo_path");
+            folder_row.subtitle = repo_path != "" ? repo_path : "Not configured";
+
             int64 generation = int_value(status, "generation");
             generation_row.subtitle = generation > 0 ? generation.to_string() : "—";
 
@@ -284,6 +345,7 @@ namespace Walky {
             uint32 done = uint_value(status, "progress_done");
             uint32 total = uint_value(status, "progress_total");
             bool syncing = state == "syncing";
+            change_folder_button.sensitive = !syncing;
             progress.visible = syncing || total > 0;
             progress.fraction = total > 0 ? (double) done / (double) total : 0.0;
             progress_label.label = total > 0

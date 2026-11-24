@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -137,6 +138,7 @@ type Status struct {
 	Device          string
 	StoreRoot       string
 	MountPoint      string
+	RepoPath        string
 	RepoID          string
 	LastSync        int64
 	Generation      int64
@@ -271,6 +273,73 @@ func (d *Daemon) UpdateSettings(s Settings) error {
 		return err
 	}
 	return config.Save(d.cfg.ConfigPath, cfg)
+}
+
+// SetRepoPath changes the local synchronized folder, updates the config file
+// and switches the daemon to the new folder's index and base. Refuses while a
+// sync is running or if the path overlaps the attached store.
+func (d *Daemon) SetRepoPath(repoPath string) error {
+	if d.cfg.ConfigPath == "" {
+		return errors.New("config path is not set")
+	}
+	if strings.TrimSpace(repoPath) == "" {
+		return errors.New("sync folder path is required")
+	}
+	abs, err := filepath.Abs(repoPath)
+	if err != nil {
+		return err
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return fmt.Errorf("sync folder: %w", err)
+	}
+	if !fi.IsDir() {
+		return errors.New("sync folder must be a directory")
+	}
+
+	d.mu.Lock()
+	syncing := d.syncing
+	var storeRoot string
+	if d.dev != nil {
+		storeRoot = d.dev.StoreRoot
+	}
+	d.mu.Unlock()
+	if syncing {
+		return errors.New("wait for the current sync to finish before changing the sync folder")
+	}
+	if storeRoot != "" {
+		if abs == storeRoot || strings.HasPrefix(abs, storeRoot+string(filepath.Separator)) ||
+			strings.HasPrefix(storeRoot, abs+string(filepath.Separator)) {
+			return errors.New("sync folder must not overlap the drive store")
+		}
+	}
+
+	cfg, err := config.Load(d.cfg.ConfigPath)
+	if err != nil {
+		return err
+	}
+	cfg.Repo.Path = abs
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	idxPath, err := state.IndexPath(abs)
+	if err != nil {
+		return err
+	}
+	basePath, err := state.BasePath(abs)
+	if err != nil {
+		return err
+	}
+	if err := config.Save(d.cfg.ConfigPath, cfg); err != nil {
+		return err
+	}
+	d.mu.Lock()
+	d.cfg.RepoPath = abs
+	d.cfg.IndexPath = idxPath
+	d.cfg.BasePath = basePath
+	d.mu.Unlock()
+	d.log.Info("sync folder changed", "repo", abs)
+	return nil
 }
 
 // ReloadConfig re-reads the configuration file and applies it.
@@ -903,6 +972,7 @@ func (d *Daemon) Status() Status {
 
 	st := Status{
 		State:         d.state,
+		RepoPath:      d.cfg.RepoPath,
 		LastSync:      unixTime(d.lastSync),
 		Generation:    d.gen,
 		Paused:        d.paused,

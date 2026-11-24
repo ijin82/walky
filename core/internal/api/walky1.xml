@@ -40,6 +40,9 @@
       <arg type="i" direction="in" name="poll_seconds"/>
     </method>
     <method name="ReloadConfig"/>
+    <method name="SetRepoPath">
+      <arg type="s" direction="in" name="repo_path"/>
+    </method>
     <method name="GetEvents">
       <arg type="u" direction="in" name="limit"/>
       <arg type="a(sssxx)" direction="out" name="events"/>

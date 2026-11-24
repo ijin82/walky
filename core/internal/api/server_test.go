@@ -22,6 +22,7 @@ func TestStatusMap(t *testing.T) {
 		State:           daemon.StateIdle,
 		Device:          "WALKY",
 		StoreRoot:       "/run/media/u/WALKY/WALKY",
+		RepoPath:        "/home/u/Sync",
 		Generation:      7,
 		LastSync:        1700000000,
 		FreeBytes:       1 << 30,
@@ -33,6 +34,9 @@ func TestStatusMap(t *testing.T) {
 	})
 	if got := m["state"].Value(); got != daemon.StateIdle {
 		t.Fatalf("state = %v", got)
+	}
+	if got := m["repo_path"].Value(); got != "/home/u/Sync" {
+		t.Fatalf("repo_path = %v", got)
 	}
 	if got := m["generation"].Value(); got != int64(7) {
 		t.Fatalf("generation = %v", got)
