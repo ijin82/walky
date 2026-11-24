@@ -25,11 +25,14 @@ Commands:
   version                 print version
   status                  print daemon/storage state
   daemon                  run the sync daemon in the foreground
-  init <device>           initialize a new storage on a block device   (M1)
-  attach <mountpoint>     adopt an existing storage                    (M1)
+  init <mountpoint>       initialize a new storage in a mounted directory
+  snapshot                commit the local folder as a new generation
+  ls                      list a generation (default: latest)
+  head                    show the current generation metadata
+  restore                 restore a generation into a directory
+  verify                  check storage integrity
+  attach <mountpoint>     adopt an existing storage                    (M4)
   sync                    request a sync from the running daemon       (M3)
-  restore <mountpoint>    restore the latest snapshot                  (M1)
-  verify                  check storage integrity                      (M1)
   gc                      garbage-collect unreferenced objects          (M5)
 
 Global flags:
@@ -60,7 +63,19 @@ func run(args []string) error {
 		return cmdStatus(args[1:])
 	case "daemon":
 		return cmdDaemon(args[1:])
-	case "init", "attach", "sync", "restore", "verify", "gc":
+	case "init":
+		return cmdInit(args[1:])
+	case "snapshot":
+		return cmdSnapshot(args[1:])
+	case "ls":
+		return cmdLs(args[1:])
+	case "head":
+		return cmdHead(args[1:])
+	case "restore":
+		return cmdRestore(args[1:])
+	case "verify":
+		return cmdVerify(args[1:])
+	case "attach", "sync", "gc":
 		return fmt.Errorf("%q is not implemented yet (see docs/DESIGN.md milestones)", args[0])
 	default:
 		return fmt.Errorf("unknown command %q (try: walky help)", args[0])

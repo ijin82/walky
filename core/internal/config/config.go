@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -173,6 +174,36 @@ func (c Config) Validate() error {
 		return errors.New("retention.trash_days must be >= 0")
 	}
 	return nil
+}
+
+// MaxFileSizeBytes parses sync.max_file_size. Empty means no limit.
+func (s Sync) MaxFileSizeBytes() (int64, error) {
+	v := strings.TrimSpace(strings.ToUpper(s.MaxFileSize))
+	if v == "" || v == "0" {
+		return 0, nil
+	}
+	mult := int64(1)
+	switch v[len(v)-1] {
+	case 'K':
+		mult = 1 << 10
+		v = v[:len(v)-1]
+	case 'M':
+		mult = 1 << 20
+		v = v[:len(v)-1]
+	case 'G':
+		mult = 1 << 30
+		v = v[:len(v)-1]
+	case 'T':
+		mult = 1 << 40
+		v = v[:len(v)-1]
+	case 'B':
+		v = v[:len(v)-1]
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("invalid max_file_size %q", s.MaxFileSize)
+	}
+	return n * mult, nil
 }
 
 // ExpandedRepoPath returns repo.path with a leading ~ expanded.
