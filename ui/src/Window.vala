@@ -21,6 +21,7 @@ namespace Walky {
         private Gtk.Button recovery_button;
         private Adw.ToastOverlay toast_overlay;
         private string last_state = "";
+        private int64 last_generation = -1;
 
         public Window (Gtk.Application app, Api api) {
             Object (
@@ -296,11 +297,15 @@ namespace Walky {
             recovery_button.visible = state == "needs_recovery";
 
             if (state == "idle" && last_state == "syncing") {
-                send_notification("Sync finished", "Generation %s".printf(generation.to_string()));
+                // Polling syncs with no changes must not spam notifications.
+                if (generation != last_generation) {
+                    send_notification("Sync finished", "Generation %s".printf(generation.to_string()));
+                }
             } else if (state == "error" && last_state != "error") {
                 send_notification("Sync failed", error);
             }
             last_state = state;
+            last_generation = generation;
         }
 
         private void on_events (GLib.Variant events) {
