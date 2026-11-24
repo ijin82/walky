@@ -188,11 +188,14 @@ make install-local
 ## 9. Releases
 
 - The version lives in `VERSION` and is injected at build time via `-ldflags`.
-- Semver: `patch` for fixes, `minor` for new features, `major` for on-drive
-  format changes or incompatible CLI changes.
+- Semver (`MAJOR.MINOR.PATCH`):
+  - **fix / patch bump** (`0.2.0` → `0.2.1`) for fixes;
+  - **feature / minor bump** (`0.2.0` → `0.3.0`) for new features;
+  - **major bump** (`0.2.0` → `1.0.0`) for on-drive format changes or
+    incompatible CLI changes.
 - Release notes are English, stored in `dist/GITHUB_RELEASE_vX.Y.Z.md` (`dist/`
-  is gitignored), with sections: Highlights, Added, Changed, Fixed, Upgrade
-  notes, Tests, Artifacts/SHA-256.
+  is gitignored), kept concise: a short bulleted list of changes since the
+  previous release plus the artifact SHA-256. Write longer notes only on request.
 - When bumping `VERSION`, create the matching annotated git tag (`vX.Y.Z`, e.g.
   `0.3.0` → `v0.3.0`) immediately after the version-bump commit, once
   `make check` is green and the tree is clean. Pushing commits and tags still
