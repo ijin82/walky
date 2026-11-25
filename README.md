@@ -131,8 +131,9 @@ daemon first only if it is not responding to eject:
 ./bin/walky ls --store /run/media/$USER/WALKY --long
 ./bin/walky verify --store /run/media/$USER/WALKY --full
 
-# restore on another machine
+# restore on another machine (or a single file with --path)
 ./bin/walky restore --store /run/media/$USER/WALKY --dest ~/Restored
+./bin/walky restore --store /run/media/$USER/WALKY --gen 5 --path docs/note.txt --dest ~/Restored
 ```
 
 `--store` is the store directory on the drive, `--repo` is the synchronized
@@ -217,10 +218,12 @@ a second drive) if the history matters, and test restoring that copy.
 make run-ui          # or ~/.local/bin/walky-ui
 ```
 
-The window shows daemon state, device, generation, last sync, free space, live
-progress and the last five files, with buttons for sync, pause, verify and
-eject. It polls the daemon over D-Bus once per second and never writes to the
-store itself.
+The window shows daemon state, device (with LUKS encryption status), local sync
+folder (with a confirmed **Change…** button), generation (with **History…** to
+browse past snapshots and restore individual files), last sync, free space, live
+progress and the last five distinct files (persisted across restarts), with
+buttons for sync, pause and eject. It polls the daemon over D-Bus once per
+second and never writes to the store itself.
 
 The same window has **Set up a drive…**: it lists mounted removable ext4
 filesystems, shows whether a store already exists, lets you pick the local
@@ -240,11 +243,13 @@ comments.
 
 Closing the window hides it; the app stays alive and a tray icon remains in the
 top bar. The icon belongs to the daemon (StatusNotifierItem), so it is visible
-even when the window is closed and survives UI restarts. It uses the monochrome
-`walky-symbolic` icon so GNOME recolors it for light and dark panels. It needs the
-“AppIndicator and KStatusNotifierItem Support” GNOME extension (already present
-here). The menu offers Sync now, Pause/Resume, Open Walky, Verify integrity and
-Quit. The Background portal is no longer used.
+even when the window is closed and survives UI restarts. It uses monochrome
+symbolic icons (`walky-symbolic` when connected, `walky-paused-symbolic` when
+paused, `walky-offline-symbolic` when no drive is attached) so GNOME recolors
+them for light and dark panels. It needs the “AppIndicator and
+KStatusNotifierItem Support” GNOME extension (already present here). The menu
+offers Sync now, Pause/Resume, Open Walky, Eject drive and Quit. The Background
+portal is no longer used.
 
 If the daemon is not running, the UI asks the user systemd manager to start
 `walky.service` once and keeps polling.

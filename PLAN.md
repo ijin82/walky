@@ -4,7 +4,7 @@ Living document: milestone status, remaining work and acceptance criteria.
 Architecture and format rules live in [docs/DESIGN.md](docs/DESIGN.md); this file
 tracks the plan.
 
-Version: `0.2.1` · updated: 2026-11-25
+Version: `0.3.0` · updated: 2026-11-25
 
 ## Milestone status
 
@@ -35,8 +35,10 @@ Version: `0.2.1` · updated: 2026-11-25
   commits, randomized two-machine convergence tests.
 - **Maintenance** — retention policy, mark-and-sweep, dead pack removal, mixed
   pack compaction, trash expiry, `walky gc`, `walky trash list|empty`.
-- **UI** — GTK4/libadwaita window over D-Bus: status, device, generation, free
-  space, progress, last five files, sync/pause/verify/eject, notifications.
+- **UI** — GTK4/libadwaita window over D-Bus: status, device (with LUKS state),
+  sync folder (with confirmed change), generation (with snapshot history browser
+  and single-file restore), free space, progress, last five distinct files
+  (persisted across restarts), sync/pause/eject, tooltips, notifications.
 - **UI settings** — excludes, retention and conflict policy are edited in a
   preferences window and sent over D-Bus; the daemon validates, persists and
   applies them immediately. Closing the window keeps the app alive.
