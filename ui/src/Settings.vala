@@ -19,7 +19,8 @@ namespace Walky {
                 application: app,
                 title: "Walky Settings",
                 default_width: 620,
-                default_height: 720
+                default_height: 720,
+                hide_on_close: true
             );
             this.api = api;
             build_ui();

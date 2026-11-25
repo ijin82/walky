@@ -355,6 +355,8 @@ namespace Walky {
         private void open_settings () {
             if (settings_window == null) {
                 settings_window = new SettingsWindow(application as Gtk.Application, api);
+            } else {
+                api.fetch_settings();
             }
             settings_window.present();
         }
