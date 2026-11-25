@@ -65,6 +65,10 @@ namespace Walky {
         public signal void verify_failed(string message);
         public signal void repo_path_changed(string repo_path);
         public signal void repo_path_failed(string message);
+        public signal void snapshots_updated(GLib.Variant snapshots);
+        public signal void snapshot_files_updated(GLib.Variant files);
+        public signal void restore_finished(string restored_path);
+        public signal void restore_failed(string message);
 
         public void verify () {
             verify_async.begin();
@@ -72,6 +76,18 @@ namespace Walky {
 
         public void set_repo_path (string repo_path) {
             set_repo_path_async.begin(repo_path);
+        }
+
+        public void fetch_snapshots () {
+            fetch_snapshots_async.begin();
+        }
+
+        public void fetch_snapshot_files (int64 gen, string query, uint32 limit) {
+            fetch_snapshot_files_async.begin(gen, query, limit);
+        }
+
+        public void restore_file (int64 gen, string rel_path, string dest_dir) {
+            restore_file_async.begin(gen, rel_path, dest_dir);
         }
 
         public void fetch_settings () {
@@ -238,6 +254,56 @@ namespace Walky {
                 refresh();
             } catch (Error e) {
                 sync_failed(e.message);
+            }
+        }
+
+        private async void fetch_snapshots_async () {
+            if (proxy == null) {
+                return;
+            }
+            try {
+                var reply = yield proxy.call(
+                    "ListSnapshots", null, GLib.DBusCallFlags.NONE, -1, null);
+                snapshots_updated(reply.get_child_value(0));
+            } catch (Error e) {
+                // No drive attached or daemon unavailable.
+            }
+        }
+
+        private async void fetch_snapshot_files_async (int64 gen, string query, uint32 limit) {
+            if (proxy == null) {
+                return;
+            }
+            try {
+                var reply = yield proxy.call(
+                    "ListSnapshotFiles",
+                    new GLib.Variant("(xsu)", gen, query, limit),
+                    GLib.DBusCallFlags.NONE,
+                    -1,
+                    null
+                );
+                snapshot_files_updated(reply.get_child_value(0));
+            } catch (Error e) {
+                restore_failed(e.message);
+            }
+        }
+
+        private async void restore_file_async (int64 gen, string rel_path, string dest_dir) {
+            if (proxy == null) {
+                restore_failed("Daemon unavailable");
+                return;
+            }
+            try {
+                var reply = yield proxy.call(
+                    "RestoreFile",
+                    new GLib.Variant("(xss)", gen, rel_path, dest_dir),
+                    GLib.DBusCallFlags.NONE,
+                    -1,
+                    null
+                );
+                restore_finished(reply.get_child_value(0).get_string());
+            } catch (Error e) {
+                restore_failed(e.message);
             }
         }
 

@@ -52,6 +52,21 @@
       <arg type="b" direction="in" name="full"/>
       <arg type="s" direction="out" name="summary"/>
     </method>
+    <method name="ListSnapshots">
+      <arg type="a(xxxx)" direction="out" name="snapshots"/>
+    </method>
+    <method name="ListSnapshotFiles">
+      <arg type="x" direction="in" name="gen"/>
+      <arg type="s" direction="in" name="query"/>
+      <arg type="u" direction="in" name="limit"/>
+      <arg type="a(ssxx)" direction="out" name="files"/>
+    </method>
+    <method name="RestoreFile">
+      <arg type="x" direction="in" name="gen"/>
+      <arg type="s" direction="in" name="path"/>
+      <arg type="s" direction="in" name="dest_dir"/>
+      <arg type="s" direction="out" name="restored_path"/>
+    </method>
 
     <signal name="StateChanged">
       <arg type="s" name="state"/>

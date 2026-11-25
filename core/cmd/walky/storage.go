@@ -210,9 +210,10 @@ func cmdRestore(args []string) error {
 	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
 	cfgPath, verbose := commonFlags(fs)
 	storePath := fs.String("store", "", "mount point of the Walky drive")
-	dest := fs.String("dest", "", "destination directory (must be empty)")
+	dest := fs.String("dest", "", "destination directory (must be empty unless --path or --force)")
 	gen := fs.Int64("gen", 0, "generation to restore (default: latest)")
-	force := fs.Bool("force", false, "overwrite an existing destination")
+	relPath := fs.String("path", "", "restore only this relative file or directory path")
+	force := fs.Bool("force", false, "overwrite existing files")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -229,6 +230,13 @@ func cmdRestore(args []string) error {
 	m, meta, err := loadSnapshot(st, *gen)
 	if err != nil {
 		return err
+	}
+	if *relPath != "" {
+		if err := st.RestorePath(*dest, m, *relPath, *force); err != nil {
+			return err
+		}
+		fmt.Printf("restored %s from generation %d to %s\n", *relPath, meta.Gen, *dest)
+		return nil
 	}
 	if err := st.Restore(*dest, m, *force); err != nil {
 		return err

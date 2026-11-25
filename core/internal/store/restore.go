@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/zeebo/blake3"
@@ -19,6 +21,33 @@ func (s *Store) Restore(dest string, m *Manifest, force bool) error {
 	if err := m.Normalize(); err != nil {
 		return err
 	}
+	return s.restoreEntries(dest, m.Entries, force, true)
+}
+
+// RestorePath materializes a single file, symlink or directory subtree from a
+// snapshot into dest without requiring dest to be empty.
+func (s *Store) RestorePath(dest string, m *Manifest, relPath string, force bool) error {
+	if err := m.Normalize(); err != nil {
+		return err
+	}
+	rel := strings.TrimPrefix(path.Clean(filepath.ToSlash(strings.TrimSpace(relPath))), "/")
+	if rel == "" || rel == "." || !filepath.IsLocal(filepath.FromSlash(rel)) {
+		return fmt.Errorf("invalid restore path %q", relPath)
+	}
+	prefix := rel + "/"
+	var matched []Entry
+	for _, e := range m.Entries {
+		if e.Path == rel || strings.HasPrefix(e.Path, prefix) {
+			matched = append(matched, e)
+		}
+	}
+	if len(matched) == 0 {
+		return fmt.Errorf("path %q not found in snapshot", rel)
+	}
+	return s.restoreEntries(dest, matched, force, false)
+}
+
+func (s *Store) restoreEntries(dest string, entries []Entry, force, requireEmpty bool) error {
 	abs, err := filepath.Abs(dest)
 	if err != nil {
 		return err
@@ -26,12 +55,14 @@ func (s *Store) Restore(dest string, m *Manifest, force bool) error {
 	if err := os.MkdirAll(abs, 0o755); err != nil {
 		return err
 	}
-	existing, err := os.ReadDir(abs)
-	if err != nil {
-		return err
-	}
-	if len(existing) > 0 && !force {
-		return fmt.Errorf("destination %s is not empty (use --force)", abs)
+	if requireEmpty && !force {
+		existing, err := os.ReadDir(abs)
+		if err != nil {
+			return err
+		}
+		if len(existing) > 0 {
+			return fmt.Errorf("destination %s is not empty (use --force)", abs)
+		}
 	}
 
 	root, err := os.OpenRoot(abs)
@@ -41,7 +72,7 @@ func (s *Store) Restore(dest string, m *Manifest, force bool) error {
 	defer root.Close()
 
 	var dirs []Entry
-	for _, e := range m.Entries {
+	for _, e := range entries {
 		p := filepath.FromSlash(e.Path)
 		switch e.Type {
 		case TypeDir:

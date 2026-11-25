@@ -11,6 +11,7 @@ namespace Walky {
         private Adw.ActionRow folder_row;
         private Gtk.Button change_folder_button;
         private Adw.ActionRow generation_row;
+        private Gtk.Button history_button;
         private Adw.ActionRow last_sync_row;
         private Adw.ActionRow free_row;
         private Gtk.ProgressBar progress;
@@ -167,6 +168,12 @@ namespace Walky {
             generation_row = new Adw.ActionRow();
             generation_row.title = "Generation";
             generation_row.subtitle = "—";
+            history_button = new Gtk.Button.with_label("History…");
+            history_button.valign = Gtk.Align.CENTER;
+            history_button.tooltip_text = "Browse past snapshots and restore individual files";
+            history_button.sensitive = false;
+            history_button.clicked.connect(open_history);
+            generation_row.add_suffix(history_button);
             group.add(generation_row);
 
             last_sync_row = new Adw.ActionRow();
@@ -340,6 +347,11 @@ namespace Walky {
             recovery_window.present();
         }
 
+        private void open_history () {
+            var win = new HistoryWindow(application as Gtk.Application, api);
+            win.present();
+        }
+
         private void open_settings () {
             if (settings_window == null) {
                 settings_window = new SettingsWindow(application as Gtk.Application, api);
@@ -373,6 +385,7 @@ namespace Walky {
 
             int64 generation = int_value(status, "generation");
             generation_row.subtitle = generation > 0 ? generation.to_string() : "—";
+            history_button.sensitive = root != "" && generation > 0;
 
             int64 last_sync = int_value(status, "last_sync");
             last_sync_row.subtitle = last_sync > 0

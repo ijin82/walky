@@ -137,6 +137,22 @@ type Event struct {
 	Time   int64
 }
 
+// SnapshotSummary describes one committed generation for the history UI.
+type SnapshotSummary struct {
+	Gen     int64
+	Created int64
+	Files   int64
+	Bytes   int64
+}
+
+// SnapshotFile describes one file or symlink in a snapshot.
+type SnapshotFile struct {
+	Path  string
+	Type  string
+	Size  int64
+	Mtime int64
+}
+
 // Status is a snapshot of daemon state.
 type Status struct {
 	State           string

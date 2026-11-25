@@ -234,6 +234,34 @@ func (s *Service) Verify(full bool) (string, *dbus.Error) {
 	return summary, nil
 }
 
+// ListSnapshots returns committed generations on the attached drive, newest first.
+func (s *Service) ListSnapshots() ([]daemon.SnapshotSummary, *dbus.Error) {
+	snaps, err := s.d.ListSnapshots()
+	if err != nil {
+		return nil, dbus.MakeFailedError(err)
+	}
+	return snaps, nil
+}
+
+// ListSnapshotFiles lists files in a generation matching query (case-insensitive).
+func (s *Service) ListSnapshotFiles(gen int64, query string, limit uint32) ([]daemon.SnapshotFile, *dbus.Error) {
+	files, err := s.d.ListSnapshotFiles(gen, query, int(limit))
+	if err != nil {
+		return nil, dbus.MakeFailedError(err)
+	}
+	return files, nil
+}
+
+// RestoreFile restores one path from a generation into destDir (or the local
+// sync folder when destDir is empty).
+func (s *Service) RestoreFile(gen int64, relPath string, destDir string) (string, *dbus.Error) {
+	out, err := s.d.RestoreFile(gen, relPath, destDir)
+	if err != nil {
+		return "", dbus.MakeFailedError(err)
+	}
+	return out, nil
+}
+
 // StateChanged emits the state signal.
 func (s *Service) StateChanged(state string) {
 	s.emit("StateChanged", state)
