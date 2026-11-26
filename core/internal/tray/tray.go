@@ -64,9 +64,10 @@ type Tray struct {
 	menu    *menu
 	actions Actions
 
-	mu   sync.Mutex
-	last Snapshot
-	done chan struct{}
+	mu         sync.Mutex
+	last       Snapshot
+	registered bool
+	done       chan struct{}
 }
 
 // New registers the item with the StatusNotifierWatcher.
@@ -137,17 +138,46 @@ func New(actions Actions) (*Tray, error) {
 		return nil, err
 	}
 
-	watcher := conn.Object(watcherName, watcherPath)
-	if err := watcher.Call(watcherName+".RegisterStatusNotifierItem", 0, name).Err; err != nil {
-		t.Close()
-		return nil, err
-	}
+	// Best-effort initial registration: at login the daemon may start before
+	// GNOME Shell's AppIndicator extension claims StatusNotifierWatcher. Run
+	// retries on the ticker and re-registers whenever the watcher restarts.
+	t.tryRegister()
 	t.refresh()
 	return t, nil
 }
 
-// Run refreshes the tooltip and menu until ctx is cancelled.
+func (t *Tray) tryRegister() bool {
+	watcher := t.conn.Object(watcherName, watcherPath)
+	if err := watcher.Call(watcherName+".RegisterStatusNotifierItem", 0, t.name).Err; err != nil {
+		t.mu.Lock()
+		t.registered = false
+		t.mu.Unlock()
+		return false
+	}
+	t.mu.Lock()
+	t.registered = true
+	t.mu.Unlock()
+	return true
+}
+
+func (t *Tray) isRegistered() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.registered
+}
+
+// Run refreshes the tooltip and menu until ctx is cancelled, and re-registers
+// the icon whenever org.kde.StatusNotifierWatcher appears or restarts.
 func (t *Tray) Run(ctx context.Context) {
+	sigCh := make(chan *dbus.Signal, 8)
+	_ = t.conn.AddMatchSignal(
+		dbus.WithMatchInterface("org.freedesktop.DBus"),
+		dbus.WithMatchMember("NameOwnerChanged"),
+		dbus.WithMatchArg(0, watcherName),
+	)
+	t.conn.Signal(sigCh)
+	defer t.conn.RemoveSignal(sigCh)
+
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -155,7 +185,16 @@ func (t *Tray) Run(ctx context.Context) {
 		case <-ctx.Done():
 			t.Close()
 			return
+		case sig := <-sigCh:
+			if sig != nil && len(sig.Body) >= 3 {
+				if newOwner, ok := sig.Body[2].(string); ok && newOwner != "" {
+					t.tryRegister()
+				}
+			}
 		case <-ticker.C:
+			if !t.isRegistered() {
+				t.tryRegister()
+			}
 			t.refresh()
 		}
 	}
