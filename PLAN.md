@@ -4,7 +4,7 @@ Living document: milestone status, remaining work and acceptance criteria.
 Architecture and format rules live in [docs/DESIGN.md](docs/DESIGN.md); this file
 tracks the plan.
 
-Version: `0.3.0` · updated: 2026-11-25
+Version: `0.4.0` · updated: 2026-11-28
 
 ## Milestone status
 
