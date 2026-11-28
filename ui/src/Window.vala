@@ -81,8 +81,8 @@ namespace Walky {
             content.append(banner);
             content.append(build_status_group());
             content.append(build_progress());
-            content.append(build_events_group());
             content.append(build_actions());
+            content.append(build_events_group());
 
             var scroll = new Gtk.ScrolledWindow();
             scroll.set_child(content);
