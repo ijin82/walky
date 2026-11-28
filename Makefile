@@ -100,6 +100,9 @@ install-local: build
 	@command -v update-desktop-database >/dev/null 2>&1 && \
 		update-desktop-database $(LOCAL_APPS) || true
 	@systemctl --user daemon-reload 2>/dev/null || true
+	@if systemctl --user is-active --quiet walky.service 2>/dev/null || systemctl --user is-enabled --quiet walky.service 2>/dev/null; then \
+		systemctl --user restart walky.service 2>/dev/null && echo "restarted: walky.service" || true; \
+	fi
 	@echo "installed: $(LOCAL_BIN)/walky $(LOCAL_BIN)/walky-ui $(HOME)/.config/systemd/user/walky.service"
 
 uninstall-local:

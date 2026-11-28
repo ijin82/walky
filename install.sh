@@ -285,8 +285,13 @@ install_local() {
     fi
     if systemd_available; then
         systemctl --user daemon-reload
-        if [ "$(service_active)" = "active" ]; then
-            systemctl --user restart walky.service && info "walky.service restarted"
+        if [ "$(service_enabled)" = "enabled" ]; then
+            systemctl --user reenable walky.service 2>/dev/null || true
+        fi
+        if systemctl --user restart walky.service; then
+            info "walky.service restarted"
+        else
+            warn "failed to restart walky.service; see: journalctl --user -u walky.service -n 30"
         fi
     fi
     echo
