@@ -28,7 +28,7 @@ import (
 
 const (
 	maxEvents          = 200
-	maxPersistedEvents = 50
+	maxPersistedEvents = 100
 )
 
 // Sync states reported to clients.
@@ -1014,6 +1014,15 @@ func (d *Daemon) loadEvents() {
 		list = list[len(list)-maxPersistedEvents:]
 	}
 	d.events = list
+	// Restore lastSync from the most recent persisted sync/file event so the UI
+	// does not show "Last sync: never" after a daemon restart.
+	for i := len(list) - 1; i >= 0; i-- {
+		ev := list[i]
+		if ev.Time > 0 && (ev.Op == "sync" || ev.Op == "push" || ev.Op == "pull" || ev.Op == "delete" || ev.Op == "conflict") {
+			d.lastSync = time.Unix(ev.Time, 0)
+			break
+		}
+	}
 }
 
 func (d *Daemon) saveEvents(path string, events []Event) {

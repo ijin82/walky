@@ -381,7 +381,7 @@ namespace Walky {
                 return;
             }
             try {
-                var reply = yield proxy.call("GetEvents", new GLib.Variant("(u)", 50u),
+                var reply = yield proxy.call("GetEvents", new GLib.Variant("(u)", 100u),
                     GLib.DBusCallFlags.NONE, 2000, null);
                 events_updated(reply.get_child_value(0));
             } catch (Error e) {

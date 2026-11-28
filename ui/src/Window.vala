@@ -450,7 +450,7 @@ namespace Walky {
             string[] seen = {};
             uint shown = 0;
             uint count = (uint) events.n_children();
-            for (uint i = 0; i < count && shown < 5; i++) {
+            for (uint i = 0; i < count && shown < 50; i++) {
                 var item = events.get_child_value(i);
                 var path = item.get_child_value(0).get_string();
                 var op = item.get_child_value(1).get_string();
@@ -475,10 +475,10 @@ namespace Walky {
                 int64 size = item.get_child_value(3).get_int64();
                 int64 ts = item.get_child_value(4).get_int64();
                 var time = ts > 0
-                    ? new GLib.DateTime.from_unix_local(ts).format("%H:%M:%S")
+                    ? new GLib.DateTime.from_unix_local(ts).format("%Y-%m-%d %H:%M:%S")
                     : "";
                 var row = new Adw.ActionRow();
-                row.title = path;
+                row.title = GLib.Markup.escape_text(path);
                 if (size > 0) {
                     row.subtitle = "%s · %s · %s".printf(op_text(op), human_bytes(size), time);
                 } else {
