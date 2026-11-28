@@ -80,6 +80,7 @@ func cmdDaemon(args []string) error {
 		AutoGC:        cfg.Maintenance.AutoGC,
 		GCInterval:    time.Duration(cfg.Maintenance.GCIntervalHours) * time.Hour,
 		PollInterval:  time.Duration(cfg.Sync.PollSeconds) * time.Second,
+		NotifyOnSync:  cfg.Sync.NotifyOnSync,
 		NoTray:        *noTray,
 		StoreOverride: *deviceRoot,
 		Interval:      *interval,

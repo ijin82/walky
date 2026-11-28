@@ -417,8 +417,9 @@ namespace Walky {
             recovery_button.visible = state == "needs_recovery";
 
             if (state == "idle" && last_state == "syncing") {
-                // Polling syncs with no changes must not spam notifications.
-                if (generation != last_generation) {
+                // Polling syncs with no changes must not spam notifications;
+                // sync-finished notifications are also opt-in via notify_on_sync.
+                if (generation != last_generation && bool_value(status, "notify_on_sync")) {
                     send_notification("Sync finished", "Generation %s".printf(generation.to_string()));
                 }
             } else if (state == "error" && last_state != "error") {

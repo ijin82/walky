@@ -118,4 +118,7 @@ func TestDefaultPollSeconds(t *testing.T) {
 	if got := Default().Sync.PollSeconds; got != 180 {
 		t.Fatalf("default poll_seconds = %d, want 180", got)
 	}
+	if Default().Sync.NotifyOnSync {
+		t.Fatal("default notify_on_sync = true, want false")
+	}
 }

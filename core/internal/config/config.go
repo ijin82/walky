@@ -64,6 +64,7 @@ type Sync struct {
 	Workers       int            `toml:"workers"`
 	MaxFileSize   string         `toml:"max_file_size"`
 	SyncOnBattery bool           `toml:"sync_on_battery"`
+	NotifyOnSync  bool           `toml:"notify_on_sync"`
 }
 
 // Exclude lists paths that are never synced.

@@ -38,6 +38,7 @@
       <arg type="i" direction="in" name="trash_days"/>
       <arg type="s" direction="in" name="conflict"/>
       <arg type="i" direction="in" name="poll_seconds"/>
+      <arg type="b" direction="in" name="notify_on_sync"/>
     </method>
     <method name="ReloadConfig"/>
     <method name="SetRepoPath">

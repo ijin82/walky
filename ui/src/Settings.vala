@@ -12,6 +12,7 @@ namespace Walky {
         private Adw.SpinRow trash_row;
         private Adw.ComboRow conflict_row;
         private Adw.SpinRow poll_row;
+        private Adw.SwitchRow notify_row;
         private Adw.ActionRow version_row;
 
         public SettingsWindow (Gtk.Application app, Api api) {
@@ -79,6 +80,11 @@ namespace Walky {
             poll_row.title = "Check for changes every";
             poll_row.subtitle = "Seconds; 0 disables automatic checks while the drive is attached.";
             sync_group.add(poll_row);
+
+            notify_row = new Adw.SwitchRow();
+            notify_row.title = "Notify when sync finishes";
+            notify_row.subtitle = "Show a desktop notification after each sync with changes. Errors are always shown.";
+            sync_group.add(notify_row);
             page.add(sync_group);
 
             var actions = new Adw.PreferencesGroup();
@@ -117,6 +123,8 @@ namespace Walky {
             var conflict = string_value(dict, "conflict");
             conflict_row.selected = conflict_index(conflict);
             poll_row.value = int_value(dict, "poll_seconds");
+            var notify_v = dict.lookup_value("notify_on_sync", new GLib.VariantType("b"));
+            notify_row.active = notify_v != null ? notify_v.get_boolean() : false;
             var ver = string_value(dict, "version");
             version_row.subtitle = ver != "" ? ver : "—";
         }
@@ -136,7 +144,8 @@ namespace Walky {
                 (int) monthly_row.value,
                 (int) trash_row.value,
                 conflict_value(conflict_row.selected),
-                (int) poll_row.value
+                (int) poll_row.value,
+                notify_row.active
             );
         }
 

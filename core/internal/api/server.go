@@ -167,28 +167,30 @@ func (s *Service) StartRecovery() *dbus.Error {
 func (s *Service) GetSettings() (map[string]dbus.Variant, *dbus.Error) {
 	st := s.d.Settings()
 	return map[string]dbus.Variant{
-		"excludes":     dbus.MakeVariant(st.Excludes),
-		"daily":        dbus.MakeVariant(int32(st.Retention.Daily)),
-		"weekly":       dbus.MakeVariant(int32(st.Retention.Weekly)),
-		"monthly":      dbus.MakeVariant(int32(st.Retention.Monthly)),
-		"trash_days":   dbus.MakeVariant(int32(st.Retention.TrashDays)),
-		"machine_days": dbus.MakeVariant(int32(st.Retention.MachineDays)),
-		"conflict":     dbus.MakeVariant(st.Conflict),
-		"poll_seconds": dbus.MakeVariant(int32(st.PollSeconds)),
-		"version":      dbus.MakeVariant(version.Version),
+		"excludes":       dbus.MakeVariant(st.Excludes),
+		"daily":          dbus.MakeVariant(int32(st.Retention.Daily)),
+		"weekly":         dbus.MakeVariant(int32(st.Retention.Weekly)),
+		"monthly":        dbus.MakeVariant(int32(st.Retention.Monthly)),
+		"trash_days":     dbus.MakeVariant(int32(st.Retention.TrashDays)),
+		"machine_days":   dbus.MakeVariant(int32(st.Retention.MachineDays)),
+		"conflict":       dbus.MakeVariant(st.Conflict),
+		"poll_seconds":   dbus.MakeVariant(int32(st.PollSeconds)),
+		"notify_on_sync": dbus.MakeVariant(st.NotifyOnSync),
+		"version":        dbus.MakeVariant(version.Version),
 	}, nil
 }
 
 // SetSettings validates, persists and applies the editable configuration.
-func (s *Service) SetSettings(excludes []string, daily int32, weekly int32, monthly int32, trashDays int32, conflict string, pollSeconds int32) *dbus.Error {
+func (s *Service) SetSettings(excludes []string, daily int32, weekly int32, monthly int32, trashDays int32, conflict string, pollSeconds int32, notifyOnSync bool) *dbus.Error {
 	err := s.d.UpdateSettings(daemon.Settings{
 		Excludes: excludes,
 		Retention: daemon.RetentionSettings{
 			Daily: int(daily), Weekly: int(weekly),
 			Monthly: int(monthly), TrashDays: int(trashDays),
 		},
-		Conflict:    conflict,
-		PollSeconds: int(pollSeconds),
+		Conflict:     conflict,
+		PollSeconds:  int(pollSeconds),
+		NotifyOnSync: notifyOnSync,
 	})
 	if err != nil {
 		return dbus.MakeFailedError(err)
@@ -301,6 +303,7 @@ func statusMap(st daemon.Status) map[string]dbus.Variant {
 		"free_bytes":       dbus.MakeVariant(st.FreeBytes),
 		"encrypted":        dbus.MakeVariant(st.Encrypted),
 		"encryption_known": dbus.MakeVariant(st.EncryptionKnown),
+		"notify_on_sync":   dbus.MakeVariant(st.NotifyOnSync),
 		"paused":           dbus.MakeVariant(st.Paused),
 		"progress_done":    dbus.MakeVariant(uint32(st.ProgressDone)),
 		"progress_total":   dbus.MakeVariant(uint32(st.ProgressTotal)),

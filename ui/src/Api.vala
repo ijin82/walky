@@ -95,8 +95,8 @@ namespace Walky {
         }
 
         public void save_settings (string[] excludes, int daily, int weekly, int monthly,
-                                   int trash_days, string conflict, int poll_seconds) {
-            save_settings_async.begin(excludes, daily, weekly, monthly, trash_days, conflict, poll_seconds);
+                                   int trash_days, string conflict, int poll_seconds, bool notify_on_sync) {
+            save_settings_async.begin(excludes, daily, weekly, monthly, trash_days, conflict, poll_seconds, notify_on_sync);
         }
 
         public void fetch_drives () {
@@ -166,14 +166,14 @@ namespace Walky {
 
         private async void save_settings_async (string[] excludes, int daily, int weekly,
                                                 int monthly, int trash_days, string conflict,
-                                                int poll_seconds) {
+                                                int poll_seconds, bool notify_on_sync) {
             if (proxy == null) {
                 settings_failed("Walky daemon is not running");
                 return;
             }
             try {
-                var args = new GLib.Variant("(asiiiisi)", excludes, daily, weekly,
-                    monthly, trash_days, conflict, poll_seconds);
+                var args = new GLib.Variant("(asiiiisib)", excludes, daily, weekly,
+                    monthly, trash_days, conflict, poll_seconds, notify_on_sync);
                 yield proxy.call("SetSettings", args, GLib.DBusCallFlags.NONE, 5000, null);
                 settings_saved();
             } catch (Error e) {

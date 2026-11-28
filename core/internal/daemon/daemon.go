@@ -108,6 +108,7 @@ type Config struct {
 	AutoGC        bool
 	GCInterval    time.Duration
 	PollInterval  time.Duration
+	NotifyOnSync  bool
 	NoTray        bool
 }
 
@@ -122,10 +123,11 @@ type RetentionSettings struct {
 
 // Settings is the editable subset of the configuration.
 type Settings struct {
-	Excludes    []string
-	Retention   RetentionSettings
-	Conflict    string
-	PollSeconds int
+	Excludes     []string
+	Retention    RetentionSettings
+	Conflict     string
+	PollSeconds  int
+	NotifyOnSync bool
 }
 
 // Event is one recent activity entry exposed to clients.
@@ -168,6 +170,7 @@ type Status struct {
 	FreeBytes       int64
 	Encrypted       bool
 	EncryptionKnown bool
+	NotifyOnSync    bool
 	Paused          bool
 	ProgressDone    int
 	ProgressTotal   int
@@ -244,10 +247,11 @@ func New(cfg Config, log *slog.Logger) *Daemon {
 		scanStores: func() ([]device.Device, error) { return device.NewWatcher(0).Scan() },
 		state:      StateNoDevice,
 		settings: Settings{
-			Excludes:    append([]string(nil), cfg.Excludes...),
-			Retention:   cfg.Retention,
-			Conflict:    cfg.Conflict,
-			PollSeconds: int(cfg.PollInterval / time.Second),
+			Excludes:     append([]string(nil), cfg.Excludes...),
+			Retention:    cfg.Retention,
+			Conflict:     cfg.Conflict,
+			PollSeconds:  int(cfg.PollInterval / time.Second),
+			NotifyOnSync: cfg.NotifyOnSync,
 		},
 	}
 	d.loadEvents()
@@ -265,10 +269,11 @@ func (d *Daemon) Settings() Settings {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return Settings{
-		Excludes:    append([]string(nil), d.settings.Excludes...),
-		Retention:   d.settings.Retention,
-		Conflict:    d.settings.Conflict,
-		PollSeconds: d.settings.PollSeconds,
+		Excludes:     append([]string(nil), d.settings.Excludes...),
+		Retention:    d.settings.Retention,
+		Conflict:     d.settings.Conflict,
+		PollSeconds:  d.settings.PollSeconds,
+		NotifyOnSync: d.settings.NotifyOnSync,
 	}
 }
 
@@ -289,6 +294,7 @@ func (d *Daemon) UpdateSettings(s Settings) error {
 	cfg.Retention.TrashDays = s.Retention.TrashDays
 	cfg.Sync.Conflict = config.ConflictPolicy(s.Conflict)
 	cfg.Sync.PollSeconds = s.PollSeconds
+	cfg.Sync.NotifyOnSync = s.NotifyOnSync
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -421,6 +427,7 @@ func (d *Daemon) applyConfig(cfg config.Config) error {
 	d.cfg.AutoSync = cfg.Device.AutoSync
 	d.cfg.AutoMount = cfg.Device.AutoMount
 	d.cfg.PollInterval = time.Duration(cfg.Sync.PollSeconds) * time.Second
+	d.cfg.NotifyOnSync = cfg.Sync.NotifyOnSync
 	d.cfg.DeviceLabel = cfg.Device.Label
 	if d.cfg.DeviceLabel == "" {
 		d.cfg.DeviceLabel = device.DefaultLabel
@@ -435,10 +442,11 @@ func (d *Daemon) applyConfig(cfg config.Config) error {
 		MachineDays: cfg.Retention.MachineDays,
 	}
 	d.settings = Settings{
-		Excludes:    append([]string(nil), cfg.Exclude.Patterns...),
-		Retention:   d.cfg.Retention,
-		Conflict:    string(cfg.Sync.Conflict),
-		PollSeconds: cfg.Sync.PollSeconds,
+		Excludes:     append([]string(nil), cfg.Exclude.Patterns...),
+		Retention:    d.cfg.Retention,
+		Conflict:     string(cfg.Sync.Conflict),
+		PollSeconds:  cfg.Sync.PollSeconds,
+		NotifyOnSync: cfg.Sync.NotifyOnSync,
 	}
 	d.mu.Unlock()
 	return nil
@@ -1048,6 +1056,7 @@ func (d *Daemon) Status() Status {
 		RepoPath:      d.cfg.RepoPath,
 		LastSync:      unixTime(d.lastSync),
 		Generation:    d.gen,
+		NotifyOnSync:  d.settings.NotifyOnSync,
 		Paused:        d.paused,
 		ProgressDone:  d.progress.Done,
 		ProgressTotal: d.progress.Total,
